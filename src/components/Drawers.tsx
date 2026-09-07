@@ -110,16 +110,34 @@ export function SettingsDrawer({ open, settings, onSet, onClose, themePref, onTh
       </div>
       <div className="set-block">
         <div className="set-block-label">AI 模型（Workers AI）</div>
-        <div className="model-grid">
-          {(Object.keys(MODEL_INFO) as ModelId[]).map((id) => {
-            const info = MODEL_INFO[id];
-            return (
-              <button key={id} className={"model-card" + (settings.model === id ? " sel" : "")} onClick={() => onSet({ model: id })}>
-                <div className="model-name">{info.name}<span className="model-tag">{info.tag}</span></div>
-                <div className="model-desc">{info.desc}</div>
-              </button>
-            );
-          })}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select
+            style={{
+              flex: 1, height: 36, padding: "0 10px", borderRadius: "var(--radius-sm)",
+              background: "var(--bg-elev)", border: "1px solid var(--border)", color: "var(--text)",
+              fontFamily: "inherit", fontSize: 13, cursor: "pointer", outline: "none",
+            }}
+            value={settings.model}
+            onChange={(e) => onSet({ model: e.target.value as ModelId })}
+          >
+            {(Object.keys(MODEL_INFO) as ModelId[]).map((id) => {
+              const info = MODEL_INFO[id];
+              return (
+                <option key={id} value={id}>
+                  {info.name} — {info.desc}（≈{info.neurons}n/次）
+                </option>
+              );
+            })}
+          </select>
+          <button
+            className="btn small"
+            onClick={() => onSet({ model: settings.model })}
+            title="将当前模型设为默认（存本机）"
+          >设为默认</button>
+        </div>
+        <div className="set-desc" style={{ marginTop: 8 }}>
+          当前：{MODEL_INFO[settings.model]?.name ?? settings.model}
+          {settings.model !== "qwen3" ? " · 非默认模型" : " · 默认模型"}
         </div>
       </div>
       <div className="set-block">
