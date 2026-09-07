@@ -3,14 +3,14 @@ import { detectLang } from "./lang";
 
 /**
  * 模型白名单（均经实测在 Workers Free 套餐可用）：
- * - glm: 质量优先，中英最佳（GLM 中文强项）
- * - qwen3: 轻快省额度（MoE 3B 激活，响应快）
+ * - qwen3: 默认 · 快速省额度（MoE 3B 激活，10s 级）
+ * - qwen3.8: 旗舰质量 · 多模态 · 262k 上下文
  */
 export const MODELS: Record<string, string> = {
-  glm: "@cf/zai-org/glm-4.7-flash",
   qwen3: "@cf/qwen/qwen3-30b-a3b-fp8",
+  qwen3_8: "@cf/qwen/qwen3.8-27b",
 };
-export const DEFAULT_MODEL = "glm";
+export const DEFAULT_MODEL = "qwen3";
 
 const STYLE_INSTRUCTIONS: Record<Exclude<StyleId, "custom">, string> = {
   formal: "正式书面语：用词准确、结构清晰，避免口语、语气词与缩略（如英文避免 don't / can't），保持专业但自然。",

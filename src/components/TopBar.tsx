@@ -52,7 +52,7 @@ export function TopBar({ mode, onMode, clipState, usage, busy, onHistory, onSett
 }
 
 export function modelLabel(model: ModelId): string {
-  return model === "qwen3" ? "Qwen3-30B-A3B" : "GLM-4.7 Flash";
+  return model === "qwen3_8" ? "Qwen3.8-27B" : "Qwen3-30B-A3B";
 }
 
 export function modeTitle(mode: Mode): string {

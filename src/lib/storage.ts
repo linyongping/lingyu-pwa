@@ -47,7 +47,7 @@ export const storage = {
     localStorage.setItem(KEYS.mode, v);
   },
   getSettings(): Settings {
-    return loadJSON<Settings>(KEYS.settings, { autoRead: true, autoCopy: true, model: "glm", explainLang: "zh" });
+    return loadJSON<Settings>(KEYS.settings, { autoRead: true, autoCopy: true, model: "qwen3", explainLang: "zh" });
   },
   setSettings(s: Settings) {
     localStorage.setItem(KEYS.settings, JSON.stringify(s));

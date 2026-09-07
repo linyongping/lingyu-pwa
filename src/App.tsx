@@ -214,7 +214,7 @@ export default function App() {
       });
       setStatus("done"); setError(null); setCopied(null);
       runSigRef.current = sig; fromHistoryRef.current = true;
-      pushToast("accent", "命中历史记录，已跳过 API 调用");
+      pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source, {}); } });
       return;
     }
     // 异步兜底：ref 为空时（页面刚重新加载、IndexedDB 还没加载完）
@@ -223,7 +223,7 @@ export default function App() {
       if (cached) {
         setResult(cached); setStatus("done"); setError(null); setCopied(null);
         runSigRef.current = sig; fromHistoryRef.current = true;
-        pushToast("accent", "命中历史记录，已跳过 API 调用");
+        pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source, {}); } });
         return;
       }
       void runProcess(mode, source, {});
@@ -263,7 +263,10 @@ export default function App() {
     const la = lastAutoRef.current;
     // 防重：剪贴板是上次处理的原文「或其结果」都跳过，避免结果写回后被再次处理来回乒乓
     if ((text === la.text || (la.result && text === la.result)) && modeRef.current === la.mode && Date.now() - la.at < DEDUPE_WINDOW) {
-      pushToast("accent", "与上次处理内容相同（或为其结果），已跳过防重复");
+      pushToast("accent", "与上次处理内容相同（或为其结果），已跳过防重复", {
+        label: "强制重跑",
+        onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, text, {}); },
+      });
       return;
     }
     setSource(text);
@@ -277,7 +280,7 @@ export default function App() {
       runSigRef.current = [modeRef.current, styleRef.current, directionRef.current, text].join("|");
       lastAutoRef.current = { text, mode: modeRef.current, at: Date.now(), result: cached.result };
       fromHistoryRef.current = true;
-      pushToast("accent", "命中历史记录，已跳过 API 调用");
+      pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source, {}); } });
       return;
     }
     void runProcess(modeRef.current, text, { auto: true });
@@ -341,7 +344,7 @@ export default function App() {
         setResult(cached); setStatus("done"); setError(null); setCopied(null);
         runSigRef.current = [modeRef.current, styleRef.current, directionRef.current, text.trim()].join("|");
         fromHistoryRef.current = true;
-        pushToast("accent", "命中历史记录，已跳过 API 调用");
+        pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source, {}); } });
         return;
       }
       void runProcess(modeRef.current, text.trim(), { auto: true });

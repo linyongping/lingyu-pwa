@@ -1,7 +1,7 @@
 export type Mode = "translate" | "grammar" | "polish";
 export type Direction = "auto" | "zh2en" | "en2zh";
 export type StyleId = "formal" | "academic" | "concise" | "casual" | "custom";
-export type ModelId = "glm" | "qwen3";
+export type ModelId = "qwen3" | "qwen3_8";
 
 export interface Settings {
   autoRead: boolean;
@@ -52,8 +52,8 @@ export const STYLES: Array<{ id: StyleId; label: string }> = [
 ];
 
 export const MODEL_INFO: Record<ModelId, { name: string; tag: string; desc: string }> = {
-  glm: { name: "GLM-4.7 Flash", tag: "默认", desc: "质量优先 · 中英最佳" },
-  qwen3: { name: "Qwen3-30B-A3B", tag: "轻快", desc: "响应更快 · 更省额度" },
+  qwen3: { name: "Qwen3-30B-A3B", tag: "默认", desc: "快速省额度 · 响应 ~10s" },
+  qwen3_8: { name: "Qwen3.8-27B", tag: "旗舰", desc: "262k 上下文 · 多模态 · 质量优先" },
 };
 
 export const CHAR_MAX = 4000;
