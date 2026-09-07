@@ -361,6 +361,7 @@ export default function App() {
       return true;
     } catch (e) {
       if (e instanceof ApiError && e.code === "invalid_passcode") {
+        setAuth("locked");
         if (!silent) setLockShake(true);
         if (!silent) setTimeout(() => setLockShake(false), 450);
         return false;
