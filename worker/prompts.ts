@@ -1,4 +1,4 @@
-import type { ChangeItem, Direction, Mode, StyleId } from "./types";
+import type { Direction, Mode, StyleId } from "./types";
 import { detectLang } from "./lang";
 
 /**
