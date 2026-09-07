@@ -3,14 +3,26 @@ import { detectLang } from "./lang";
 
 /**
  * 模型白名单（均经实测在 Workers Free 套餐可用）：
- * - qwen3: 默认 · 快速省额度（MoE 3B 激活，10s 级）
+ * - qwen3: 默认 · 快速省额度（MoE 3B 激活，~10s）
  * - qwen3.8: 旗舰质量 · 多模态 · 262k 上下文
+ * - m2m100: 翻译专用 · 100 语言 · 最便宜
+ * - llama3.2_1b: 超轻量 · 极速 · 仅适合简单翻译
  */
 export const MODELS: Record<string, string> = {
   qwen3: "@cf/qwen/qwen3-30b-a3b-fp8",
   qwen3_8: "@cf/qwen/qwen3.8-27b",
+  m2m100: "@cf/meta/m2m100-1.2b",
+  llama32_1b: "@cf/meta/llama-3.2-1b-instruct",
 };
 export const DEFAULT_MODEL = "qwen3";
+
+/** 每次请求的估算神经元消耗（Workers AI 计费单位，仅供参考） */
+export const NEURON_ESTIMATE: Record<string, number> = {
+  qwen3: 5,
+  qwen3_8: 20,
+  m2m100: 2,
+  llama32_1b: 1,
+};
 
 const STYLE_INSTRUCTIONS: Record<Exclude<StyleId, "custom">, string> = {
   formal: "正式书面语：用词准确、结构清晰，避免口语、语气词与缩略（如英文避免 don't / can't），保持专业但自然。",
@@ -105,4 +117,5 @@ export function buildMessages(
   };
 }
 
+export { buildMessages, resolveDirection, detectLang, NEURON_ESTIMATE };
 export type { ChangeItem };

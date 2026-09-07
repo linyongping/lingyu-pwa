@@ -1,4 +1,4 @@
-import { buildMessages, DEFAULT_MODEL, MODELS } from "./prompts";
+import { buildMessages, DEFAULT_MODEL, MODELS, NEURON_ESTIMATE } from "./prompts";
 import { detectLang, parseModelJson, stripToFallbackText } from "./lang";
 import type { Env, ProcessBody } from "./types";
 
@@ -149,12 +149,14 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
   }
 
   const usage = await incrementUsage(env);
+  const neuronEstimate = NEURON_ESTIMATE[modelKey] ?? 5;
   return json(200, {
     result: parsed.result,
     changes: parsed.changes,
     detectedLang: detectLang(text),
     direction: mode === "translate" ? direction : null,
     model: modelKey,
+    neuronEstimate,
     usage,
   });
 }

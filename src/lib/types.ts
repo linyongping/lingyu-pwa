@@ -1,7 +1,7 @@
 export type Mode = "translate" | "grammar" | "polish";
 export type Direction = "auto" | "zh2en" | "en2zh";
 export type StyleId = "formal" | "academic" | "concise" | "casual" | "custom";
-export type ModelId = "qwen3" | "qwen3_8";
+export type ModelId = "qwen3" | "qwen3_8" | "m2m100" | "llama32_1b";
 
 export interface Settings {
   autoRead: boolean;
@@ -22,6 +22,7 @@ export interface ProcessOk {
   detectedLang: "zh" | "en";
   direction: "zh2en" | "en2zh" | null;
   model: string;
+  neuronEstimate: number;
   usage: Usage;
 }
 
@@ -51,9 +52,11 @@ export const STYLES: Array<{ id: StyleId; label: string }> = [
   { id: "custom", label: "自定义" },
 ];
 
-export const MODEL_INFO: Record<ModelId, { name: string; tag: string; desc: string }> = {
-  qwen3: { name: "Qwen3-30B-A3B", tag: "默认", desc: "快速省额度 · 响应 ~10s" },
-  qwen3_8: { name: "Qwen3.8-27B", tag: "旗舰", desc: "262k 上下文 · 多模态 · 质量优先" },
+export const MODEL_INFO: Record<ModelId, { name: string; tag: string; desc: string; neurons: number }> = {
+  qwen3: { name: "Qwen3-30B-A3B", tag: "默认", desc: "快速省额度 · ~10s", neurons: 5 },
+  qwen3_8: { name: "Qwen3.8-27B", tag: "旗舰", desc: "262k 上下文 · 多模态 · 质量优先", neurons: 20 },
+  m2m100: { name: "M2M-100 1.2B", tag: "翻译专用", desc: "100 语言 · 最便宜 · 仅翻译", neurons: 2 },
+  llama32_1b: { name: "Llama-3.2 1B", tag: "极速", desc: "超轻量 · 仅简单翻译", neurons: 1 },
 };
 
 export const CHAR_MAX = 4000;

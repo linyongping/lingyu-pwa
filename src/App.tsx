@@ -462,6 +462,7 @@ export default function App() {
           onMode={(m) => { setMode(m); setShowChanges(false); }}
           clipState={clipPillState}
           usage={usage}
+          currentModel={settings.model}
           busy={status === "processing"}
           onHistory={() => setShowHistory(true)}
           onSettings={() => setShowSettings(true)}

@@ -1,5 +1,5 @@
 import { Icon } from "./Icon";
-import { MODE_LABELS } from "../lib/types";
+import { MODE_LABELS, MODEL_INFO } from "../lib/types";
 import type { Mode, ModelId, Usage } from "../lib/types";
 
 interface Props {
@@ -7,6 +7,7 @@ interface Props {
   onMode: (m: Mode) => void;
   clipState: "on" | "denied" | "off";
   usage: Usage | null;
+  currentModel: ModelId;
   busy: boolean;
   onHistory: () => void;
   onSettings: () => void;
@@ -14,7 +15,7 @@ interface Props {
   resolvedTheme: "dark" | "light";
 }
 
-export function TopBar({ mode, onMode, clipState, usage, busy, onHistory, onSettings, onToggleTheme, resolvedTheme }: Props) {
+export function TopBar({ mode, onMode, clipState, usage, currentModel, busy, onHistory, onSettings, onToggleTheme, resolvedTheme }: Props) {
   const clipText = clipState === "denied" ? "剪贴板 · 需要授权" : clipState === "off" ? "自动读取 关" : "剪贴板监听中";
   const usageClass = usage ? (usage.used >= usage.limit ? " err" : usage.used >= usage.limit * 0.9 ? " warn" : "") : "";
   return (
@@ -38,9 +39,10 @@ export function TopBar({ mode, onMode, clipState, usage, busy, onHistory, onSett
       <span className={"pill clip-pill " + clipState}>
         <span className="clip-dot" />{clipText}
       </span>
-      <span className={"pill" + usageClass}>
+      <span className={"pill" + usageClass} title={`模型: ${MODEL_INFO[currentModel]?.name ?? currentModel} · 每次约 ${MODEL_INFO[currentModel]?.neurons ?? "?"} 神经元`}>
         <Icon name="zap" size={12} />
-        {usage ? `AI 用量 ${usage.used} / ${usage.limit}` : "AI 用量 —"}
+        {usage ? `AI ${usage.used}/${usage.limit}` : "AI —"}
+        <span style={{ opacity: 0.5, marginLeft: 4, fontSize: 10 }}>≈{MODEL_INFO[currentModel]?.neurons ?? "?"}n</span>
       </span>
       <button className="icon-btn" title="历史记录" aria-label="历史记录" onClick={onHistory}><Icon name="history" size={17} /></button>
       <button className="icon-btn" title="设置" aria-label="设置" onClick={onSettings}><Icon name="settings" size={17} /></button>
@@ -52,7 +54,7 @@ export function TopBar({ mode, onMode, clipState, usage, busy, onHistory, onSett
 }
 
 export function modelLabel(model: ModelId): string {
-  return model === "qwen3_8" ? "Qwen3.8-27B" : "Qwen3-30B-A3B";
+  return MODEL_INFO[model]?.name ?? model;
 }
 
 export function modeTitle(mode: Mode): string {
