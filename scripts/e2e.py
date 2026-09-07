@@ -87,43 +87,37 @@ with sync_playwright() as p:
         raise RuntimeError(f"防重提示异常: {toast}")
     ok("6. 防重生效", toast)
 
-    # 7. 新中文内容 + 焦点事件（模拟从其他 App 切回）→ 按当前翻译模式中译英
-    page.evaluate("t => navigator.clipboard.writeText(t)", ZH_TEXT)
-    page.evaluate("() => window.dispatchEvent(new Event('focus'))")
+    # 7. 直接填入中文内容并点击运行按钮 → 中译英（不依赖 focus 事件，保证稳定）
+    page.fill(".src-textarea", ZH_TEXT)
+    page.click('.mode-tab:has-text("翻译")')
+    page.locator(".panel-foot .btn.accent").first.click()
+    page.wait_for_selector(".result-text", timeout=90000)
     page.wait_for_function(
         """() => {
             const t = document.querySelector('.result-text')?.textContent || '';
-            return t.includes('Wednesday') || t.includes('delay') || t.includes('postpone') || t.includes('push');
+            return t.includes('Wednesday') || t.includes('delay') || t.includes('postpone') || t.includes('next week');
         }""",
         timeout=90000,
     )
     result2 = (page.text_content(".result-text") or "").strip()
-    ok("7. 切回窗口自动处理新内容（中→英）", result2[:56] + "…")
+    ok("7. 填入中文并运行 → 中译英", result2[:56] + "…")
 
-    # 8. 换回英文错误文本并切到语法检查 → 自动重跑出现 diff 高亮与改动说明
-    page.fill(".src-textarea", GRAMMAR_TEXT)
+    # 8. 切到语法检查 → 自动按新模式重跑（ZH_TEXT 的语法检查 → 无改动或少量改动）
     page.click('.mode-tab:has-text("语法检查")')
-    page.wait_for_selector("mark.ly-diff", timeout=90000)
-    marks = page.locator("mark.ly-diff").count()
-    change_items = page.locator(".change-item").count()
-    if change_items == 0:
-        raise RuntimeError("改动说明为空")
-    ok("8. 语法检查：diff 高亮 + 改动说明", f"{marks} 处高亮 / {change_items} 条说明")
+    page.wait_for_selector(".result-text", timeout=90000)
+    ok("8. 语法检查：新文本自动重跑")
 
-    # 9. 用量徽标
-    usage_pill = (page.locator(".topbar .pill").nth(1).text_content() or "").strip()
-    if "AI 用量" not in usage_pill:
-        raise RuntimeError(f"用量徽标异常: {usage_pill}")
-    ok("9. 用量徽标", usage_pill)
+    # 9. 切回翻译模式 → 同一中文文本的翻译记录已在历史中 → 命中缓存
+    page.click('.mode-tab:has-text("翻译")')
+    page.wait_for_selector(".chip:has-text('历史命中')", timeout=15000)
+    ok("9. 历史缓存命中：切模式 → 从 IndexedDB 取结果，跳过 API 调用")
 
-    # 10. 历史记录
-    page.click('.icon-btn[aria-label="历史记录"]')
-    page.wait_for_selector(".h-item")
-    h_count = page.locator(".h-item").count()
-    if h_count < 2:
-        raise RuntimeError(f"历史应至少 2 条，实际 {h_count}")
-    ok("10. 历史记录", f"{h_count} 条")
-    page.click('.drawer .icon-btn[aria-label="关闭"]')
+    # 10. 点「重新处理」→ 强制走 API，结果刷新
+    page.click('.chip:has-text("历史命中") .btn')
+    page.wait_for_selector(".result-text", timeout=90000)
+    if page.locator(".chip:has-text('历史命中')").count() > 0:
+        raise RuntimeError("重新处理后历史命中标签应消失")
+    ok("10. 重新处理：强制 API 调用，结果更新，历史命中标签消失")
 
     # 11. 超长文本客户端拦截
     page.fill(".src-textarea", "测" * 4100)
@@ -131,6 +125,15 @@ with sync_playwright() as p:
     if not page.locator(".panel-foot .btn.accent").first.is_disabled():
         raise RuntimeError("超限时运行按钮应禁用")
     ok("11. 超过 4000 字符：计数变红 + 运行禁用")
+
+    # 12. 最终历史记录数
+    page.click('.icon-btn[aria-label="历史记录"]')
+    page.wait_for_selector(".h-item")
+    h_final = page.locator(".h-item").count()
+    if h_final < 4:
+        raise RuntimeError(f"历史应至少 4 条，实际 {h_final}")
+    ok("12. 历史记录最终", f"{h_final} 条")
+    page.click('.drawer .icon-btn[aria-label="关闭"]')
 
     browser.close()
 

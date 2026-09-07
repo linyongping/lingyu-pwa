@@ -61,6 +61,8 @@ interface ResultProps {
   onCycleDirection: () => void;
   onEditCustom: () => void;
   modelLabel: string;
+  fromHistory: boolean;
+  onRerun: () => void;
 }
 
 export function ResultPanel(props: ResultProps) {
@@ -129,6 +131,18 @@ export function ResultPanel(props: ResultProps) {
                 <span className="chip accent"><Icon name="wand" size={12} />{STYLES.find((s) => s.id === props.style)?.label ?? "正式"}风格</span>
               ) : null}
               {mode !== "translate" && hasChanges ? <span className="chip ok">{result.changes!.length} 处改动</span> : null}
+              {props.fromHistory ? (
+                <span className="chip dim" style={{ marginLeft: 8 }}>
+                  <Icon name="history" size={11} />
+                  历史命中
+                  <button
+                    className="btn ghost small"
+                    style={{ marginLeft: 4, height: 20, padding: "0 8px", fontSize: 10.5 }}
+                    onClick={props.onRerun}
+                    title="忽略历史，重新调用 AI"
+                  >重新处理</button>
+                </span>
+              ) : null}
             </div>
 
             {mode === "polish" ? (

@@ -8,7 +8,7 @@ import { useTheme } from "./hooks/useTheme";
 import type { ThemePref } from "./hooks/useTheme";
 import { useToasts } from "./hooks/useToasts";
 import { ApiError, fetchUsage, processText } from "./lib/api";
-import { isSkippable, readClipboard, writeClipboard } from "./lib/clipboard";
+import { detectLang, isSkippable, readClipboard, writeClipboard } from "./lib/clipboard";
 import { addHistory, clearHistory, deleteHistory, listHistory } from "./lib/history";
 import { storage } from "./lib/storage";
 import { DEDUPE_WINDOW, MODE_LABELS, STYLES } from "./lib/types";
@@ -65,11 +65,31 @@ export default function App() {
   const pendingWriteRef = useRef<string | null>(null);
   const runSigRef = useRef("");
   const clipWarnedRef = useRef(false);
+  const fromHistoryRef = useRef(false);
+  const historyRef = useRef(history);
+  historyRef.current = history;
+  const usageRef = useRef(usage);
+  usageRef.current = usage;
 
   useEffect(() => { storage.setSettings(settings); }, [settings]);
   useEffect(() => { storage.setMode(mode); }, [mode]);
   useEffect(() => { storage.setTheme(themePref); }, [themePref]);
   useEffect(() => { storage.setCustomStyle(customStyle); }, [customStyle]);
+
+  /* ── 历史缓存命中 ─────────────────────── */
+  const tryLoadFromHistory = (text: string, mode: Mode): ProcessOk | null => {
+    const t = text.trim();
+    const match = historyRef.current.find((item) => item.source === t && item.mode === mode);
+    if (!match) return null;
+    return {
+      result: match.result,
+      changes: match.changes,
+      detectedLang: detectLang(t),
+      direction: null,
+      model: settingsRef.current.model,
+      usage: usageRef.current ?? { used: 0, limit: 3000, date: "" },
+    };
+  };
 
   /* ── 复制与补写 ─────────────────────── */
   const copyNow = useCallback(async (text: string) => {
@@ -119,6 +139,7 @@ export default function App() {
       setStatus("done");
       runSigRef.current = [modeArg, styleRef.current, directionRef.current, t].join("|");
       lastSourceRef.current = t;
+      fromHistoryRef.current = false;
       if (opts?.auto) lastAutoRef.current = { text: t, mode: modeArg, at: Date.now(), result: resp.result };
       void addHistory({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -161,6 +182,15 @@ export default function App() {
     if (auth !== "ok" || busyRef.current || status !== "done" || !source.trim()) return;
     const sig = [mode, style, direction, source.trim()].join("|");
     if (sig === runSigRef.current) return;
+    // 模式/风格/方向变化时，也先检查历史缓存
+    const cached = tryLoadFromHistory(source, mode);
+    if (cached) {
+      setResult(cached); setStatus("done"); setError(null); setCopied(null);
+      runSigRef.current = sig;
+      fromHistoryRef.current = true;
+      pushToast("accent", "命中历史记录，已跳过 API 调用");
+      return;
+    }
     void runProcess(mode, source, {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, style, direction, source, status, auth]);
@@ -201,6 +231,19 @@ export default function App() {
       return;
     }
     setSource(text);
+    // 历史缓存命中：相同文本+相同模式直接用缓存结果，跳过 API 调用
+    const cached = tryLoadFromHistory(text, modeRef.current);
+    if (cached) {
+      setResult(cached);
+      setStatus("done");
+      setError(null);
+      setCopied(null);
+      runSigRef.current = [modeRef.current, styleRef.current, directionRef.current, text].join("|");
+      lastAutoRef.current = { text, mode: modeRef.current, at: Date.now(), result: cached.result };
+      fromHistoryRef.current = true;
+      pushToast("accent", "命中历史记录，已跳过 API 调用");
+      return;
+    }
     void runProcess(modeRef.current, text, { auto: true });
   }, [pushToast, runProcess]);
 
@@ -256,6 +299,15 @@ export default function App() {
         return;
       }
       setSource(text.trim());
+      // 历史缓存命中
+      const cached = tryLoadFromHistory(text.trim(), modeRef.current);
+      if (cached) {
+        setResult(cached); setStatus("done"); setError(null); setCopied(null);
+        runSigRef.current = [modeRef.current, styleRef.current, directionRef.current, text.trim()].join("|");
+        fromHistoryRef.current = true;
+        pushToast("accent", "命中历史记录，已跳过 API 调用");
+        return;
+      }
       void runProcess(modeRef.current, text.trim(), { auto: true });
     };
     document.addEventListener("paste", onPaste);
@@ -427,6 +479,8 @@ export default function App() {
             }}
             onEditCustom={() => setShowCustom(true)}
             modelLabel={modelLabel(settings.model)}
+            fromHistory={fromHistoryRef.current}
+            onRerun={() => { fromHistoryRef.current = false; void runProcess(mode, source, {}); }}
           />
         </main>
 
