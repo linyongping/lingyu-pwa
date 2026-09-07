@@ -1,5 +1,7 @@
 # 邻语 Lingyu — 剪贴板翻译台 PWA
 
+> 自动部署已启用：push 到 main 分支即触发 Cloudflare Pages 构建。
+
 粘贴即处理：中英翻译、语法检查、英文润色。激活窗口自动读取剪贴板 → 按上次模式处理 → 结果自动写回剪贴板。
 
 **线上地址**：https://lingyu.haigr.workers.dev （口令保护，向所有者索取）
