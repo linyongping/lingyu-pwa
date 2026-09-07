@@ -25,13 +25,13 @@ export function TopBar({ mode, onMode, clipState, usage, currentModel, busy, onH
         <span className="brand-name">邻语 <span style={{ opacity: 0.55 }}>Lingyu</span></span>
       </div>
       <nav className="mode-tabs" aria-label="处理模式">
-        <button className={"mode-tab" + (mode === "translate" ? " active" : "")} onClick={() => onMode("translate")} disabled={busy}>
+        <button className={"mode-tab" + (mode === "translate" ? " active" : "")} onClick={() => onMode("translate")}>
           <Icon name="translate" size={15} />翻译
         </button>
-        <button className={"mode-tab" + (mode === "grammar" ? " active" : "")} onClick={() => onMode("grammar")} disabled={busy}>
+        <button className={"mode-tab" + (mode === "grammar" ? " active" : "")} onClick={() => onMode("grammar")}>
           <Icon name="spellcheck" size={15} />语法检查
         </button>
-        <button className={"mode-tab" + (mode === "polish" ? " active" : "")} onClick={() => onMode("polish")} disabled={busy}>
+        <button className={"mode-tab" + (mode === "polish" ? " active" : "")} onClick={() => onMode("polish")}>
           <Icon name="wand" size={15} />润色
         </button>
       </nav>

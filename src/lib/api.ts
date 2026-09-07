@@ -51,7 +51,7 @@ export interface ProcessParams {
   model: ModelId;
 }
 
-export async function processText(params: ProcessParams): Promise<ProcessOk> {
+export async function processText(params: ProcessParams, signal?: AbortSignal): Promise<ProcessOk> {
   if (!params.text.trim()) throw new ApiError("empty_text", "文本为空", 0);
   if (params.text.length > CHAR_MAX) {
     throw new ApiError("too_long", `文本超过 ${CHAR_MAX} 字符上限（当前 ${params.text.length}）`, 422);
@@ -61,6 +61,7 @@ export async function processText(params: ProcessParams): Promise<ProcessOk> {
     resp = await fetch("/api/process", {
       method: "POST",
       headers: headers(params.passcode),
+      signal,
       body: JSON.stringify({
         mode: params.mode,
         text: params.text,
@@ -72,7 +73,8 @@ export async function processText(params: ProcessParams): Promise<ProcessOk> {
         model: params.model,
       }),
     });
-  } catch {
+  } catch (e: any) {
+    if (e?.name === "AbortError") throw new ApiError("timeout", "请求超时（15 秒），请稍后重试", 0);
     throw new ApiError("network", "网络错误，请检查连接后重试", 0);
   }
   return getJSON<ProcessOk>(resp);

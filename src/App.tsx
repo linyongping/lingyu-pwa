@@ -69,6 +69,7 @@ export default function App() {
   const runSigRef = useRef("");
   const clipWarnedRef = useRef(false);
   const fromHistoryRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
   const historyRef = useRef(history);
   historyRef.current = history;
   const usageRef = useRef(usage);
@@ -129,7 +130,11 @@ export default function App() {
     }
 
     setError(null); setCopied(null); setResult(null); setStatus("processing");
-    busyRef.current = true;
+    // 取消上一个进行中的请求（允许模式切换时无缝衔接）
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     const started = performance.now();
 
     try {
@@ -154,7 +159,7 @@ export default function App() {
         })(),
         explainLang: settingsRef.current.explainLang,
         model: settingsRef.current.model,
-      });
+      }, controller.signal);
       const used = ((performance.now() - started) / 1000).toFixed(1) + "s";
       setElapsed(used);
       setResult(resp);
@@ -174,8 +179,10 @@ export default function App() {
         styleLabel: modeArg === "polish" ? STYLES.find((s) => s.id === styleRef.current)?.label ?? null : null,
       }).then(() => listHistory()).then(setHistory);
       deliverResult(resp);
-    } catch (e) {
+    } catch (e: any) {
       busyRef.current = false;
+      // 被新请求 abort 的旧请求不显示错误
+      if (e?.name === "AbortError" && abortRef.current !== controller) return;
       if (e instanceof ApiError) {
         if (e.code === "invalid_passcode") {
           setAuth("locked");
@@ -196,6 +203,7 @@ export default function App() {
       }
       return;
     } finally {
+      clearTimeout(timeoutId);
       busyRef.current = false;
     }
   }, [customStyle, deliverResult, pushToast]);
@@ -263,8 +271,8 @@ export default function App() {
       return;
     }
     const la = lastAutoRef.current;
-    // 防重：剪贴板是上次处理的原文「或其结果」都跳过，避免结果写回后被再次处理来回乒乓
-    if ((text === la.text || (la.result && text === la.result)) && modeRef.current === la.mode && Date.now() - la.at < DEDUPE_WINDOW) {
+    // 防重：剪贴板是上次处理的原文「或其结果」都跳过（不限模式，彻底杜绝乒乓）
+    if ((text === la.text || (la.result && text === la.result)) && Date.now() - la.at < DEDUPE_WINDOW) {
       pushToast("accent", "与上次处理内容相同（或为其结果），已跳过防重复", {
         label: "强制重跑",
         onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, text, {}); },

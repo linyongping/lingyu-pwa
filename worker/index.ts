@@ -1,3 +1,4 @@
+import { tracing } from "cloudflare:workers";
 import { buildMessages, DEFAULT_MODEL, MODELS, NEURON_ESTIMATE } from "./prompts";
 import { detectLang, parseModelJson, stripToFallbackText } from "./lang";
 import type { Env, ProcessBody } from "./types";
@@ -117,7 +118,13 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
 
   let rawOut: unknown = null;
   try {
-    rawOut = await runModel(env, modelId, messages, temperature);
+    rawOut = await tracing.enterSpan("chat", async (chatSpan) => {
+      chatSpan.setAttribute("gen_ai.operation.name", "chat");
+      chatSpan.setAttribute("gen_ai.agent.name", "lingyu");
+      chatSpan.setAttribute("gen_ai.request.model", modelId);
+      chatSpan.setAttribute("gen_ai.request.temperature", temperature);
+      return runModel(env, modelId, messages, temperature);
+    });
   } catch (err) {
     return json(502, errorBody("ai_error", `模型调用失败：${err instanceof Error ? err.message : "unknown"}`));
   }
@@ -131,7 +138,13 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
       { role: "system" as const, content: "上一次输出不是合法 JSON。必须只输出一个 JSON 对象本身，不要有任何其他字符。" },
     ];
     try {
-      rawOut = await runModel(env, modelId, retryMessages, temperature);
+      rawOut = await tracing.enterSpan("chat", async (chatSpan) => {
+        chatSpan.setAttribute("gen_ai.operation.name", "chat");
+        chatSpan.setAttribute("gen_ai.agent.name", "lingyu");
+        chatSpan.setAttribute("gen_ai.request.model", modelId);
+        chatSpan.setAttribute("gen_ai.request.temperature", temperature);
+        return runModel(env, modelId, retryMessages, temperature);
+      });
       raw = extractText(rawOut);
       parsed = parseModelJson(raw);
     } catch {
@@ -183,7 +196,11 @@ export default {
       if (usage.used >= usage.limit) {
         return json(429, errorBody("quota_exceeded", "今日 AI 请求额度已用尽，明天自动恢复"));
       }
-      return handleProcess(request, env);
+      return tracing.enterSpan("invoke_agent", async (span) => {
+        span.setAttribute("gen_ai.operation.name", "invoke_agent");
+        span.setAttribute("gen_ai.agent.name", "lingyu");
+        return handleProcess(request, env);
+      });
     }
 
     return json(404, errorBody("not_found", "未知接口"));
