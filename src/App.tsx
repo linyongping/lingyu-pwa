@@ -97,6 +97,7 @@ export default function App() {
       detectedLang: lyDetectLang(t),
       direction: null,
       model: settingsRef.current.model,
+      neuronEstimate: 0,
       usage: usageRef.current ?? { used: 0, limit: 3000, date: "" },
     };
   };
@@ -210,7 +211,8 @@ export default function App() {
     if (quickMatch) {
       setResult({
         result: quickMatch.result, changes: quickMatch.changes, detectedLang: lyDetectLang(t),
-        direction: null, model: settingsRef.current.model, usage: usageRef.current ?? { used: 0, limit: 3000, date: "" },
+        direction: null, model: settingsRef.current.model, neuronEstimate: 0,
+        usage: usageRef.current ?? { used: 0, limit: 3000, date: "" },
       });
       setStatus("done"); setError(null); setCopied(null);
       runSigRef.current = sig; fromHistoryRef.current = true;
@@ -534,7 +536,7 @@ export default function App() {
           onLoad={(it) => {
             setMode(it.mode);
             setSource(it.source);
-            setResult({ result: it.result, changes: it.changes, detectedLang: "zh", direction: null, model: settings.model, usage: usage ?? { used: 0, limit: 0, date: "" } });
+            setResult({ result: it.result, changes: it.changes, detectedLang: "zh", direction: null, model: settings.model, neuronEstimate: 0, usage: usage ?? { used: 0, limit: 0, date: "" } });
             setStatus("done");
             setError(null);
             setCopied(null);

@@ -117,5 +117,5 @@ export function buildMessages(
   };
 }
 
-export { buildMessages, resolveDirection, detectLang, NEURON_ESTIMATE };
+export { buildMessages, resolveDirection, detectLang };
 export type { ChangeItem };
