@@ -27,6 +27,7 @@ export interface ProcessBody {
   direction?: Direction;
   style?: StyleId;
   customPrompt?: string;
+  systemPrompt?: string;
   explainLang?: "zh" | "en";
   model?: string;
 }

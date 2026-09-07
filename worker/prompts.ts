@@ -72,6 +72,7 @@ export function buildMessages(
   mode: Mode,
   text: string,
   opts: { direction: Direction; style: StyleId; customPrompt: string; explainLang: "zh" | "en" },
+  systemPromptOverride: string = "",
 ): { messages: Array<{ role: "system" | "user"; content: string }>; temperature: number; direction: "zh2en" | "en2zh" | null } {
   let system: string;
   let temperature: number;
@@ -87,6 +88,11 @@ export function buildMessages(
   } else {
     system = polishSystem(opts.style, opts.customPrompt, opts.explainLang);
     temperature = 0.7;
+  }
+
+  // 用户自定义提示词优先（前端设置页编辑，存 localStorage，请求时带上）
+  if (systemPromptOverride) {
+    system = systemPromptOverride;
   }
 
   return {

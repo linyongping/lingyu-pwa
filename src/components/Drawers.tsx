@@ -3,6 +3,7 @@ import { Icon } from "./Icon";
 import { MODEL_INFO, MODE_LABELS } from "../lib/types";
 import type { HistoryItem, Mode, ModelId, Settings } from "../lib/types";
 import { formatTime } from "../lib/diff";
+import { PROMPT_LABELS, DEFAULT_PROMPTS, type PromptKey } from "../lib/prompts";
 import type { ThemePref } from "../hooks/useTheme";
 
 /* ── 抽屉骨架 ─────────────────────────── */
@@ -75,13 +76,14 @@ export function HistoryDrawer({ open, items, filter, onFilter, onClose, onLoad, 
 }
 
 /* ── 设置 ─────────────────────────────── */
-export function SettingsDrawer({ open, settings, onSet, onClose, themePref, onTheme }: {
+export function SettingsDrawer({ open, settings, onSet, onClose, themePref, onTheme, onOpenPrompts }: {
   open: boolean;
   settings: Settings;
   onSet: (patch: Partial<Settings>) => void;
   onClose: () => void;
   themePref: ThemePref;
   onTheme: (t: ThemePref) => void;
+  onOpenPrompts: () => void;
 }) {
   return (
     <Drawer open={open} title="设置" onClose={onClose} foot="访问口令已保存至本机 · 结果与历史不离开你的设备">
@@ -127,6 +129,13 @@ export function SettingsDrawer({ open, settings, onSet, onClose, themePref, onTh
           <button className={"seg-btn" + (themePref === "light" ? " active" : "")} onClick={() => onTheme("light")}>浅色</button>
           <button className={"seg-btn" + (themePref === "system" ? " active" : "")} onClick={() => onTheme("system")}>跟随系统</button>
         </div>
+      </div>
+      <div className="set-row">
+        <div>
+          <div className="set-label">提示词管理</div>
+          <div className="set-desc">查看和编辑各模式的系统提示词，修改仅保存在本机</div>
+        </div>
+        <button className="btn small" onClick={onOpenPrompts}><Icon name="wand" size={13} />编辑</button>
       </div>
     </Drawer>
   );
@@ -226,6 +235,66 @@ export function CustomStyleModal({ value, onSave, onClose }: {
         <div className="modal-actions">
           <button className="btn ghost" onClick={onClose}>取消</button>
           <button className="btn accent" onClick={() => onSave(draft.trim())}>保存并使用</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ── 提示词管理 ───────────────────────── */
+export function PromptManagerModal({
+  prompts, onSave, onClose,
+}: {
+  prompts: Partial<Record<PromptKey, string>>;
+  onSave: (p: Partial<Record<PromptKey, string>>) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState<Partial<Record<PromptKey, string>>>({ ...prompts });
+  const [active, setActive] = useState<PromptKey>("translate_zh2en");
+  const current = draft[active] ?? DEFAULT_PROMPTS[active];
+  const isCustomized = active in draft;
+
+  return (
+    <>
+      <div className="scrim" style={{ zIndex: 64 }} onClick={onClose} />
+      <div className="modal-card" role="dialog" aria-label="提示词管理" style={{ maxWidth: 560 }}>
+        <div className="modal-title">提示词管理</div>
+        <div className="modal-sub">查看和编辑各模式的系统提示词，修改仅保存在本机浏览器中。</div>
+
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+          {(Object.keys(PROMPT_LABELS) as PromptKey[]).map((key) => (
+            <button
+              key={key}
+              className={"style-chip" + (active === key ? " sel" : "")}
+              onClick={() => setActive(key)}
+              style={{ fontSize: 11.5 }}
+            >
+              {PROMPT_LABELS[key]}
+              {key in draft ? <span style={{ marginLeft: 4, color: "var(--ok)" }}>·已改</span> : null}
+            </button>
+          ))}
+        </div>
+
+        <textarea
+          className="custom-textarea"
+          style={{ minHeight: 180, fontFamily: "var(--font-mono)", fontSize: 12 }}
+          value={current}
+          onChange={(e) => setDraft((d) => ({ ...d, [active]: e.target.value }))}
+        />
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, fontSize: 11.5, color: "var(--text-3)" }}>
+          <span>{isCustomized ? "已自定义" : "使用默认提示词"} · {current.length} 字符</span>
+          {isCustomized ? (
+            <button
+              className="btn ghost small"
+              onClick={() => setDraft((d) => { const n = { ...d }; delete n[active]; return n; })}
+            >恢复默认</button>
+          ) : null}
+        </div>
+
+        <div className="modal-actions">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn accent" onClick={() => onSave(draft)}>保存到本地</button>
         </div>
       </div>
     </>

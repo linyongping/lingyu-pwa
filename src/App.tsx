@@ -2,14 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { modelLabel, TopBar } from "./components/TopBar";
 import { SourcePanel } from "./components/SourcePanel";
 import { ResultPanel } from "./components/ResultPanel";
-import { CustomStyleModal, HistoryDrawer, LockScreen, OnboardingModal, SettingsDrawer } from "./components/Drawers";
+import { CustomStyleModal, HistoryDrawer, LockScreen, OnboardingModal, PromptManagerModal, SettingsDrawer } from "./components/Drawers";
 import { Toaster } from "./components/Toaster";
 import { useTheme } from "./hooks/useTheme";
 import type { ThemePref } from "./hooks/useTheme";
 import { useToasts } from "./hooks/useToasts";
 import { ApiError, fetchUsage, processText } from "./lib/api";
-import { detectLang, isSkippable, readClipboard, writeClipboard } from "./lib/clipboard";
+import { detectLang as lyDetectLang, isSkippable, readClipboard, writeClipboard } from "./lib/clipboard";
 import { addHistory, clearHistory, deleteHistory, listHistory } from "./lib/history";
+import { loadCustomPrompts, saveCustomPrompts, getPrompt, type PromptKey } from "./lib/prompts";
 import { storage } from "./lib/storage";
 import { DEDUPE_WINDOW, MODE_LABELS, STYLES } from "./lib/types";
 import type { Direction, HistoryItem, Mode, ProcessOk, Settings, StyleId, Usage } from "./lib/types";
@@ -46,6 +47,8 @@ export default function App() {
   const [hFilter, setHFilter] = useState<"all" | Mode>("all");
   const [showOnboard, setShowOnboard] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
+  const [showPrompts, setShowPrompts] = useState(false);
+  const [customPrompts, setCustomPrompts] = useState<Partial<Record<PromptKey, string>>>(loadCustomPrompts);
 
   const [usage, setUsage] = useState<Usage | null>(null);
   const [clipState, setClipState] = useState<"on" | "denied" | "off">("on");
@@ -75,16 +78,23 @@ export default function App() {
   useEffect(() => { storage.setMode(mode); }, [mode]);
   useEffect(() => { storage.setTheme(themePref); }, [themePref]);
   useEffect(() => { storage.setCustomStyle(customStyle); }, [customStyle]);
+  useEffect(() => { saveCustomPrompts(customPrompts); }, [customPrompts]);
 
   /* ── 历史缓存命中 ─────────────────────── */
-  const tryLoadFromHistory = (text: string, mode: Mode): ProcessOk | null => {
+  const tryLoadFromHistory = async (text: string, mode: Mode): Promise<ProcessOk | null> => {
     const t = text.trim();
-    const match = historyRef.current.find((item) => item.source === t && item.mode === mode);
+    // 先查内存 ref（快速路径）
+    let match = historyRef.current.find((item) => item.source === t && item.mode === mode);
+    // ref 为空时（页面刚重新加载、IndexedDB 还没加载完）做一次异步兜底
+    if (!match) {
+      const fresh = await listHistory();
+      match = fresh.find((item) => item.source === t && item.mode === mode);
+    }
     if (!match) return null;
     return {
       result: match.result,
       changes: match.changes,
-      detectedLang: detectLang(t),
+      detectedLang: lyDetectLang(t),
       direction: null,
       model: settingsRef.current.model,
       usage: usageRef.current ?? { used: 0, limit: 3000, date: "" },
@@ -129,6 +139,18 @@ export default function App() {
         direction: directionRef.current,
         style: styleRef.current,
         customPrompt: styleRef.current === "custom" ? customStyle : "",
+        systemPrompt: (() => {
+          if (modeArg === "translate") {
+            const dir = directionRef.current === "zh2en" || directionRef.current === "en2zh"
+              ? directionRef.current
+              : lyDetectLang(t) === "zh" ? "zh2en" : "en2zh";
+            return dir === "zh2en"
+              ? getPrompt("translate_zh2en", customPrompts)
+              : getPrompt("translate_en2zh", customPrompts);
+          }
+          if (modeArg === "grammar") return getPrompt("grammar", customPrompts);
+          return getPrompt("polish", customPrompts);
+        })(),
         explainLang: settingsRef.current.explainLang,
         model: settingsRef.current.model,
       });
@@ -182,16 +204,30 @@ export default function App() {
     if (auth !== "ok" || busyRef.current || status !== "done" || !source.trim()) return;
     const sig = [mode, style, direction, source.trim()].join("|");
     if (sig === runSigRef.current) return;
-    // 模式/风格/方向变化时，也先检查历史缓存
-    const cached = tryLoadFromHistory(source, mode);
-    if (cached) {
-      setResult(cached); setStatus("done"); setError(null); setCopied(null);
-      runSigRef.current = sig;
-      fromHistoryRef.current = true;
+    // 同步快速路径：historyRef 已填充时直接命中，无需 await
+    const t = source.trim();
+    const quickMatch = historyRef.current.find((item) => item.source === t && item.mode === mode);
+    if (quickMatch) {
+      setResult({
+        result: quickMatch.result, changes: quickMatch.changes, detectedLang: lyDetectLang(t),
+        direction: null, model: settingsRef.current.model, usage: usageRef.current ?? { used: 0, limit: 3000, date: "" },
+      });
+      setStatus("done"); setError(null); setCopied(null);
+      runSigRef.current = sig; fromHistoryRef.current = true;
       pushToast("accent", "命中历史记录，已跳过 API 调用");
       return;
     }
-    void runProcess(mode, source, {});
+    // 异步兜底：ref 为空时（页面刚重新加载、IndexedDB 还没加载完）
+    void (async () => {
+      const cached = await tryLoadFromHistory(source, mode);
+      if (cached) {
+        setResult(cached); setStatus("done"); setError(null); setCopied(null);
+        runSigRef.current = sig; fromHistoryRef.current = true;
+        pushToast("accent", "命中历史记录，已跳过 API 调用");
+        return;
+      }
+      void runProcess(mode, source, {});
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, style, direction, source, status, auth]);
 
@@ -232,7 +268,7 @@ export default function App() {
     }
     setSource(text);
     // 历史缓存命中：相同文本+相同模式直接用缓存结果，跳过 API 调用
-    const cached = tryLoadFromHistory(text, modeRef.current);
+    const cached = await tryLoadFromHistory(text, modeRef.current);
     if (cached) {
       setResult(cached);
       setStatus("done");
@@ -287,7 +323,7 @@ export default function App() {
 
   /* 页内粘贴兜底（iOS / 任意平台 ⌘V） */
   useEffect(() => {
-    const onPaste = (e: ClipboardEvent) => {
+    const onPaste = async (e: ClipboardEvent) => {
       if (authRef.current !== "ok") return;
       const target = e.target as HTMLElement | null;
       if (target && target.closest("[data-plain-input]")) return;
@@ -300,7 +336,7 @@ export default function App() {
       }
       setSource(text.trim());
       // 历史缓存命中
-      const cached = tryLoadFromHistory(text.trim(), modeRef.current);
+      const cached = await tryLoadFromHistory(text.trim(), modeRef.current);
       if (cached) {
         setResult(cached); setStatus("done"); setError(null); setCopied(null);
         runSigRef.current = [modeRef.current, styleRef.current, directionRef.current, text.trim()].join("|");
@@ -512,6 +548,7 @@ export default function App() {
           onClose={() => setShowSettings(false)}
           themePref={themePref}
           onTheme={setThemePref}
+          onOpenPrompts={() => setShowPrompts(true)}
         />
 
         {showOnboard ? <OnboardingModal onDone={finishOnboard} /> : null}
@@ -525,6 +562,13 @@ export default function App() {
               setShowCustom(false);
               pushToast("ok", "自定义风格已保存");
             }}
+          />
+        ) : null}
+        {showPrompts ? (
+          <PromptManagerModal
+            prompts={customPrompts}
+            onClose={() => setShowPrompts(false)}
+            onSave={(p) => { setCustomPrompts(p); setShowPrompts(false); pushToast("ok", "提示词已保存到本机"); }}
           />
         ) : null}
       </div>

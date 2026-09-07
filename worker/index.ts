@@ -105,6 +105,7 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
     ? (body.style as ProcessBody["style"])
     : "formal";
   const customPrompt = typeof body.customPrompt === "string" ? body.customPrompt.slice(0, 2000) : "";
+  const systemPromptOverride = typeof body.systemPrompt === "string" && body.systemPrompt.trim() ? body.systemPrompt.trim().slice(0, 4000) : "";
   const directionPref = body.direction === "zh2en" || body.direction === "en2zh" ? body.direction : "auto";
 
   const { messages, temperature, direction } = buildMessages(mode, text, {
@@ -112,7 +113,7 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
     style: style ?? "formal",
     customPrompt,
     explainLang,
-  });
+  }, systemPromptOverride);
 
   let rawOut: unknown = null;
   try {

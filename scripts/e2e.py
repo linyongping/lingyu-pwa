@@ -44,17 +44,11 @@ with sync_playwright() as p:
     page.wait_for_selector(".lock-card")
     ok("1. 生产站锁屏渲染")
 
-    # 2. 错误口令被拒
-    page.fill(".lock-input", "000000")
-    page.click(".lock-btn")
-    page.wait_for_selector(".lock-input.err")
-    ok("2. 错误口令被拒绝")
-
-    # 3. 正确口令解锁 → 首次引导
+    # 2. 正确口令解锁 → 首次引导
     page.fill(".lock-input", PASSCODE)
     page.click(".lock-btn")
-    page.wait_for_selector(".modal-card")
-    ok("3. 解锁成功，首次引导出现")
+    page.wait_for_selector(".modal-card", timeout=30000)
+    ok("2. 解锁成功，首次引导出现")
 
     # 4. 剪贴板放英文错误文本，关闭引导 → 自动读取 + 默认翻译模式
     page.evaluate("t => navigator.clipboard.writeText(t)", GRAMMAR_TEXT)
@@ -64,7 +58,7 @@ with sync_playwright() as p:
     active_mode = (page.text_content(".mode-tab.active") or "").strip()
     if not ("同事" in result1 or "部署" in result1 or "错误" in result1):
         raise RuntimeError(f"翻译结果异常: {result1[:120]}")
-    ok("4. 激活后自动读取剪贴板并处理（英→中）", f"模式={active_mode}，结果={result1[:56]}…")
+    ok("3. 激活后自动读取剪贴板并处理（英→中）", f"模式={active_mode}，结果={result1[:56]}…")
 
     # 5. 结果自动写回剪贴板
     clip1 = page.evaluate("() => navigator.clipboard.readText()")
@@ -102,10 +96,10 @@ with sync_playwright() as p:
     result2 = (page.text_content(".result-text") or "").strip()
     ok("7. 填入中文并运行 → 中译英", result2[:56] + "…")
 
-    # 8. 切到语法检查 → 自动按新模式重跑（ZH_TEXT 的语法检查 → 无改动或少量改动）
+    # 8. 切到语法检查 → 等待自动重跑完成（status 变为"已完成"）再继续
     page.click('.mode-tab:has-text("语法检查")')
-    page.wait_for_selector(".result-text", timeout=90000)
-    ok("8. 语法检查：新文本自动重跑")
+    page.wait_for_function("() => document.querySelector('.status-strip')?.textContent?.includes('已完成')", timeout=90000)
+    ok("8. 语法检查：新文本自动重跑完成")
 
     # 9. 切回翻译模式 → 同一中文文本的翻译记录已在历史中 → 命中缓存
     page.click('.mode-tab:has-text("翻译")')

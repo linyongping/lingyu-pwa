@@ -46,6 +46,7 @@ export interface ProcessParams {
   direction: "auto" | "zh2en" | "en2zh";
   style: string;
   customPrompt: string;
+  systemPrompt?: string;
   explainLang: "zh" | "en";
   model: ModelId;
 }
@@ -66,6 +67,7 @@ export async function processText(params: ProcessParams): Promise<ProcessOk> {
         direction: params.direction,
         style: params.style,
         customPrompt: params.customPrompt,
+        systemPrompt: params.systemPrompt,
         explainLang: params.explainLang,
         model: params.model,
       }),
