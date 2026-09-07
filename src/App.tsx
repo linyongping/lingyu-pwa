@@ -473,7 +473,6 @@ export default function App() {
           clipState={clipPillState}
           usage={usage}
           currentModel={settings.model}
-          busy={status === "processing"}
           onHistory={() => setShowHistory(true)}
           onSettings={() => setShowSettings(true)}
           onToggleTheme={() => setThemePref(resolvedTheme === "dark" ? "light" : "dark")}

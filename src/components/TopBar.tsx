@@ -8,14 +8,13 @@ interface Props {
   clipState: "on" | "denied" | "off";
   usage: Usage | null;
   currentModel: ModelId;
-  busy: boolean;
   onHistory: () => void;
   onSettings: () => void;
   onToggleTheme: () => void;
   resolvedTheme: "dark" | "light";
 }
 
-export function TopBar({ mode, onMode, clipState, usage, currentModel, busy, onHistory, onSettings, onToggleTheme, resolvedTheme }: Props) {
+export function TopBar({ mode, onMode, clipState, usage, currentModel, onHistory, onSettings, onToggleTheme, resolvedTheme }: Props) {
   const clipText = clipState === "denied" ? "剪贴板 · 需要授权" : clipState === "off" ? "自动读取 关" : "剪贴板监听中";
   const usageClass = usage ? (usage.used >= usage.limit ? " err" : usage.used >= usage.limit * 0.9 ? " warn" : "") : "";
   return (
