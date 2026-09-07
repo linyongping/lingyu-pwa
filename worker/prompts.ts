@@ -117,5 +117,3 @@ export function buildMessages(
   };
 }
 
-export { buildMessages, resolveDirection, detectLang };
-export type { ChangeItem };
