@@ -1,0 +1,77 @@
+/* ============================================================
+   Lingyu 邻语 · 设计 token（深色玻璃 / Dark Glassmorphism）
+   与 designs/lingyu/README.md 保持同步
+   ============================================================ */
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-display: "Space Grotesk", var(--font-ui);
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-lg: 20px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --blur: saturate(150%) blur(22px);
+  --speed: .18s;
+}
+
+html[data-theme="dark"] {
+  --bg: #0a0d14;
+  --bg-elev: rgba(255, 255, 255, .045);
+  --bg-elev-2: rgba(255, 255, 255, .09);
+  --bg-solid: rgba(17, 21, 31, .92);
+  --border: rgba(255, 255, 255, .09);
+  --border-strong: rgba(255, 255, 255, .17);
+  --text: rgba(233, 238, 250, .94);
+  --text-2: rgba(233, 238, 250, .62);
+  --text-3: rgba(233, 238, 250, .38);
+  --accent: #8b7cff;
+  --accent-2: #46c8ff;
+  --accent-grad: linear-gradient(135deg, #8b7cff, #46c8ff);
+  --accent-soft: rgba(139, 124, 255, .16);
+  --accent-border: rgba(139, 124, 255, .42);
+  --ok: #3ecf9a;
+  --ok-soft: rgba(62, 207, 154, .14);
+  --warn: #f5b74e;
+  --warn-soft: rgba(245, 183, 78, .14);
+  --err: #ff7a76;
+  --err-soft: rgba(255, 122, 118, .14);
+  --mark-bg: rgba(139, 124, 255, .2);
+  --shadow-panel: 0 16px 48px rgba(0, 0, 0, .32);
+  --shadow-pop: 0 24px 64px rgba(0, 0, 0, .5);
+  --scrollbar: rgba(255, 255, 255, .12);
+  --glow-a: rgba(120, 100, 255, .17);
+  --glow-b: rgba(40, 180, 255, .11);
+  --skel-hi: rgba(255, 255, 255, .16);
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  --bg: #eef0f6;
+  --bg-elev: rgba(255, 255, 255, .66);
+  --bg-elev-2: rgba(255, 255, 255, .95);
+  --bg-solid: rgba(252, 253, 255, .94);
+  --border: rgba(19, 26, 46, .1);
+  --border-strong: rgba(19, 26, 46, .2);
+  --text: #171d2e;
+  --text-2: rgba(23, 29, 46, .64);
+  --text-3: rgba(23, 29, 46, .4);
+  --accent: #6d5ae8;
+  --accent-2: #0e9de9;
+  --accent-grad: linear-gradient(135deg, #6d5ae8, #0e9de9);
+  --accent-soft: rgba(109, 90, 232, .11);
+  --accent-border: rgba(109, 90, 232, .45);
+  --ok: #1a9e6c;
+  --ok-soft: rgba(26, 158, 108, .12);
+  --warn: #c07b16;
+  --warn-soft: rgba(192, 123, 22, .12);
+  --err: #d94a45;
+  --err-soft: rgba(217, 74, 69, .1);
+  --mark-bg: rgba(109, 90, 232, .16);
+  --shadow-panel: 0 16px 40px rgba(31, 41, 72, .1);
+  --shadow-pop: 0 24px 60px rgba(31, 41, 72, .18);
+  --scrollbar: rgba(19, 26, 46, .18);
+  --glow-a: rgba(120, 100, 255, .12);
+  --glow-b: rgba(40, 180, 255, .1);
+  --skel-hi: rgba(19, 26, 46, .08);
+  color-scheme: light;
+}

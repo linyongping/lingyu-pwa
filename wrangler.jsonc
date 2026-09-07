@@ -1,0 +1,28 @@
+// wrangler 配置（由 @cloudflare/vite-plugin 读取；构建产物由插件自动接管）
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lingyu",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-01",
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "ai": {
+    "binding": "AI",
+    "remote": true
+  },
+  "kv_namespaces": [
+    {
+      "binding": "USAGE_KV",
+      "id": "c42597b434864106a309e7d27f256577",
+      "remote": true
+    }
+  ],
+  "vars": {
+    "DAILY_REQUEST_LIMIT": "3000"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
