@@ -28,7 +28,11 @@ export function TopBar({ mode, onMode, clipState, usage, currentModel, onHistory
       ? t("usage.tokens", { total: usage.tokens.total, prompt: usage.tokens.prompt, completion: usage.tokens.completion })
       : t("usage.tokens.none"),
     usage?.neurons
-      ? t(usage.neurons.estimated ? "usage.neurons.est" : "usage.neurons.real", { used: usage.neurons.used, limit: usage.neurons.limit })
+      ? t(usage.neurons.estimated ? "usage.neurons.est" : "usage.neurons.real", {
+          used: usage.neurons.used,
+          limit: usage.neurons.limit,
+          left: Math.max(0, usage.neurons.limit - usage.neurons.used),
+        })
       : null,
   ].filter(Boolean).join("\n");
   return (
