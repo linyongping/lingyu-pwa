@@ -2,12 +2,15 @@ export type Mode = "translate" | "grammar" | "polish";
 export type Direction = "auto" | "zh2en" | "en2zh";
 export type StyleId = "formal" | "academic" | "concise" | "casual" | "custom";
 export type ModelId = "qwen3" | "qwen3_8" | "m2m100" | "llama32_1b";
+/** 界面显示语言（与 explainLang「说明语言」不同：后者控制 AI 输出的说明文字） */
+export type UiLang = "zh" | "en";
 
 export interface Settings {
   autoRead: boolean;
   autoCopy: boolean;
   model: ModelId;
   explainLang: "zh" | "en";
+  uiLang: UiLang;
 }
 
 export interface ChangeItem {
@@ -44,21 +47,14 @@ export interface HistoryItem {
   direction?: "zh2en" | "en2zh" | null;
 }
 
-export const MODE_LABELS: Record<Mode, string> = { translate: "翻译", grammar: "语法检查", polish: "润色" };
+/** 润色风格，按展示顺序；文案由 i18n 的 style.* 键提供 */
+export const STYLES: StyleId[] = ["formal", "academic", "concise", "casual", "custom"];
 
-export const STYLES: Array<{ id: StyleId; label: string }> = [
-  { id: "formal", label: "正式" },
-  { id: "academic", label: "学术" },
-  { id: "concise", label: "简洁" },
-  { id: "casual", label: "口语" },
-  { id: "custom", label: "自定义" },
-];
-
-export const MODEL_INFO: Record<ModelId, { name: string; tag: string; desc: string; neurons: number }> = {
-  qwen3: { name: "Qwen3-30B-A3B", tag: "默认", desc: "快速省额度 · ~10s", neurons: 5 },
-  qwen3_8: { name: "Qwen3.8-27B", tag: "旗舰", desc: "262k 上下文 · 多模态 · 质量优先", neurons: 20 },
-  m2m100: { name: "M2M-100 1.2B", tag: "翻译专用", desc: "100 语言 · 最便宜 · 仅翻译", neurons: 2 },
-  llama32_1b: { name: "Llama-3.2 1B", tag: "极速", desc: "超轻量 · 仅简单翻译", neurons: 1 },
+export const MODEL_INFO: Record<ModelId, { name: string; neurons: number }> = {
+  qwen3: { name: "Qwen3-30B-A3B", neurons: 5 },
+  qwen3_8: { name: "Qwen3.8-27B", neurons: 20 },
+  m2m100: { name: "M2M-100 1.2B", neurons: 2 },
+  llama32_1b: { name: "Llama-3.2 1B", neurons: 1 },
 };
 
 export const CHAR_MAX = 4000;

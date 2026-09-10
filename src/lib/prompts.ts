@@ -6,13 +6,6 @@
 
 export type PromptKey = "translate_zh2en" | "translate_en2zh" | "grammar" | "polish";
 
-export const PROMPT_LABELS: Record<PromptKey, string> = {
-  translate_zh2en: "翻译 · 中→英",
-  translate_en2zh: "翻译 · 英→中",
-  grammar: "语法检查（双语）",
-  polish: "润色（通用风格框架）",
-};
-
 const BASE_TRANSLATE_ZH2EN = `你是专业中译英译者。将用户文本翻译成地道、自然的英文。
 规则：
 1. 忠实传达原意，符合英文表达习惯，不要逐词直译。

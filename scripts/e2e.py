@@ -36,6 +36,11 @@ with sync_playwright() as p:
         locale="zh-CN",
     )
     page = context.new_page()
+    # 界面语言默认英文；本测试断言中文文案，故固定 uiLang=zh
+    context.add_init_script(
+        "localStorage.setItem('ly_settings', JSON.stringify("
+        "{autoRead:true,autoCopy:true,model:'qwen3',explainLang:'zh',uiLang:'zh'}));"
+    )
     page.on("pageerror", lambda e: print("[pageerror]", e))
     page.set_default_timeout(45000)
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { modelLabel, TopBar } from "./components/TopBar";
 import { SourcePanel } from "./components/SourcePanel";
 import { ResultPanel } from "./components/ResultPanel";
@@ -13,7 +13,8 @@ import { addHistory, clearHistory, deleteHistory, historyMatches, listHistory } 
 import { loadCustomPrompts, saveCustomPrompts, type PromptKey } from "./lib/prompts";
 import { storage } from "./lib/storage";
 import { APP_BUILD_ID, APP_BUILT_AT, activateUpdate, fetchDeployedBuild, formatBuiltAt } from "./lib/version";
-import { DEDUPE_WINDOW, MODE_LABELS, STYLES } from "./lib/types";
+import { I18nContext, translate, type MsgKey, type TVars } from "./lib/i18n";
+import { DEDUPE_WINDOW } from "./lib/types";
 import type { Direction, HistoryItem, Mode, ProcessOk, Settings, StyleId, Usage } from "./lib/types";
 
 type Auth = "checking" | "ok" | "locked";
@@ -56,6 +57,14 @@ export default function App() {
   const [outdated, setOutdated] = useState(false);
 
   const { toasts, pushToast } = useToasts();
+
+  /* ── 界面语言 ────────────────────────── */
+  // tr 标识稳定、内部读 ref，避免各 useCallback 频繁重建；lang 变化只用于触发子组件重渲染
+  const uiLangRef = useRef(settings.uiLang);
+  uiLangRef.current = settings.uiLang;
+  const tr = useCallback((key: MsgKey, vars?: TVars) => translate(uiLangRef.current, key, vars), []);
+  const i18nValue = useMemo(() => ({ lang: settings.uiLang, t: tr }), [settings.uiLang, tr]);
+  const modeLabel = useCallback((m: Mode) => tr(`mode.${m}` as MsgKey), [tr]);
 
   /* refs 镜像，避免异步回调读到过期闭包 */
   const modeRef = useRef(mode); modeRef.current = mode;
@@ -109,6 +118,12 @@ export default function App() {
     };
   }, [checkVersion]);
 
+  /* 界面语言变化时同步 <html lang> 与标题 */
+  useEffect(() => {
+    document.documentElement.setAttribute("lang", settings.uiLang === "zh" ? "zh-CN" : "en");
+    document.title = tr("app.title");
+  }, [settings.uiLang, tr]);
+
   /* ── 历史缓存命中 ─────────────────────── */
   const tryLoadFromHistory = async (text: string, mode: Mode): Promise<ProcessOk | null> => {
     const t = text.trim();
@@ -152,9 +167,9 @@ export default function App() {
   /* ── 核心处理 ───────────────────────── */
   const runProcess = useCallback(async (modeArg: Mode, textArg: string) => {
     const t = textArg.trim();
-    if (!t) { pushToast("warn", "没有可处理的内容"); return; }
+    if (!t) { pushToast("warn", tr("toast.noContent")); return; }
     if (t.length > 4000) {
-      setError({ title: "文本超过 4,000 字符上限", desc: `当前 ${t.length.toLocaleString()} 字符，请缩短后重试。` });
+      setError({ title: tr("err.tooLong.title"), desc: tr("err.tooLong.desc", { n: t.length.toLocaleString() }) });
       setStatus("error"); setResult(null); setCopied(null);
       return;
     }
@@ -208,7 +223,7 @@ export default function App() {
         source: t,
         result: resp.result,
         changes: resp.changes,
-        styleLabel: modeArg === "polish" ? STYLES.find((s) => s.id === styleRef.current)?.label ?? null : null,
+        styleLabel: modeArg === "polish" ? styleRef.current : null,
         direction: resp.direction,
       }).then(() => listHistory()).then(setHistory);
       deliverResult(resp);
@@ -219,22 +234,34 @@ export default function App() {
       if (e instanceof ApiError) {
         if (e.code === "invalid_passcode") {
           setAuth("locked");
-          pushToast("err", "口令已失效，请重新输入");
+          pushToast("err", tr("toast.passcodeInvalid"));
         } else if (e.code === "too_long") {
-          setError({ title: "文本超过 4,000 字符上限", desc: e.message });
+          setError({ title: tr("err.tooLong.title"), desc: tr("err.tooLong.desc", { n: t.length.toLocaleString() }) });
           setStatus("error");
         } else if (e.code === "quota_exceeded") {
-          setError({ title: "今日 AI 请求额度已用尽", desc: "Workers AI 免费额度明日自动恢复；也可在设置中切换轻量模型降低消耗。" });
+          setError({ title: tr("err.quota.title"), desc: tr("err.quota.desc") });
           setStatus("error");
         } else if (e.code === "timeout") {
-          setError({ title: "处理超时", desc: e.message });
+          setError({ title: tr("err.timeout.title"), desc: tr("err.timeout.desc") });
+          setStatus("error");
+        } else if (e.code === "network") {
+          setError({ title: tr("err.fail.title"), desc: tr("err.network.desc") });
+          setStatus("error");
+        } else if (e.code === "empty_text") {
+          setError({ title: tr("err.fail.title"), desc: tr("err.empty.desc") });
+          setStatus("error");
+        } else if (e.code === "ai_error") {
+          setError({ title: tr("err.fail.title"), desc: tr("err.ai.desc") });
+          setStatus("error");
+        } else if (e.code === "bad_output") {
+          setError({ title: tr("err.fail.title"), desc: tr("err.badOutput.desc") });
           setStatus("error");
         } else {
-          setError({ title: "处理失败", desc: e.message });
+          setError({ title: tr("err.fail.title"), desc: tr("err.fail.unknown") });
           setStatus("error");
         }
       } else {
-        setError({ title: "处理失败", desc: "发生未知错误，请重试。" });
+        setError({ title: tr("err.fail.title"), desc: tr("err.fail.unknown") });
         setStatus("error");
       }
       return;
@@ -263,7 +290,7 @@ export default function App() {
       });
       setStatus("done"); setError(null); setCopied(null);
       runSigRef.current = sig; fromHistoryRef.current = true;
-      pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source); } });
+      pushToast("accent", tr("toast.history"), { label: tr("toast.history.rerun"), onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source); } });
       return;
     }
     // 异步兜底：ref 为空时（页面刚重新加载、IndexedDB 还没加载完）
@@ -272,7 +299,7 @@ export default function App() {
       if (cached) {
         setResult(cached); setStatus("done"); setError(null); setCopied(null);
         runSigRef.current = sig; fromHistoryRef.current = true;
-        pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source); } });
+        pushToast("accent", tr("toast.history"), { label: tr("toast.history.rerun"), onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source); } });
         return;
       }
       void runProcess(mode, source);
@@ -288,7 +315,7 @@ export default function App() {
     try {
       if (textParamActiveRef.current) return; // URL 参数文本模式，暂停剪贴板读取
       if (!settingsRef.current.autoRead) {
-        if (!clipWarnedRef.current) pushToast("warn", "自动读取已关闭（设置中可开启）");
+        if (!clipWarnedRef.current) pushToast("warn", tr("toast.autoReadOff"));
         clipWarnedRef.current = true;
         return;
       }
@@ -296,10 +323,10 @@ export default function App() {
       if (!clip.ok) {
         if (clip.reason === "denied") {
           setClipState("denied");
-          if (!clipWarnedRef.current) pushToast("warn", "未获得剪贴板权限——请在浏览器地址栏授权后重试");
+          if (!clipWarnedRef.current) pushToast("warn", tr("toast.clipDenied"));
         } else if (clip.reason === "unsupported") {
           setClipState("denied");
-          if (!clipWarnedRef.current) pushToast("warn", "此浏览器不支持自动读取，请直接 ⌘V 粘贴");
+          if (!clipWarnedRef.current) pushToast("warn", tr("toast.clipUnsupported"));
         } else {
           setClipState("on");
         }
@@ -310,14 +337,14 @@ export default function App() {
       setClipState("on");
       const text = clip.value;
       if (isSkippable(text)) {
-        pushToast("warn", "剪贴板是链接或内容过短，已跳过自动处理");
+        pushToast("warn", tr("toast.skippable"));
         return;
       }
       const la = lastAutoRef.current;
       // 防重：剪贴板是上次处理的原文「或其结果」都跳过（不限模式，彻底杜绝乒乓）
       if ((text === la.text || (la.result && text === la.result)) && Date.now() - la.at < DEDUPE_WINDOW) {
-        pushToast("accent", "与上次处理内容相同（或为其结果），已跳过防重复", {
-          label: "强制重跑",
+        pushToast("accent", tr("toast.dup"), {
+          label: tr("toast.dup.force"),
           onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, text); },
         });
         return;
@@ -333,7 +360,7 @@ export default function App() {
         runSigRef.current = [modeRef.current, styleRef.current, directionRef.current, text].join("|");
         lastAutoRef.current = { text, mode: modeRef.current, at: Date.now(), result: cached.result };
         fromHistoryRef.current = true;
-        pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source); } });
+        pushToast("accent", tr("toast.history"), { label: tr("toast.history.rerun"), onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source); } });
         return;
       }
       void runProcess(modeRef.current, text);
@@ -353,18 +380,18 @@ export default function App() {
         if (ok) {
           pendingWriteRef.current = null;
           setCopied("auto");
-          pushToast("ok", "结果已补写进剪贴板");
+          pushToast("ok", tr("toast.pendingWritten"));
         }
       } else if (clip.value === lastSourceRef.current) {
         const ok = await writeClipboard(pending);
         if (ok) {
           pendingWriteRef.current = null;
           setCopied("auto");
-          pushToast("ok", "结果已补写进剪贴板");
+          pushToast("ok", tr("toast.pendingWritten"));
         }
       } else {
         pendingWriteRef.current = null;
-        pushToast("warn", "剪贴板已有新内容，上次结果未写回（可在历史中找回）");
+        pushToast("warn", tr("toast.pendingStale"));
       }
     }
     void simulateFocusRead();
@@ -391,7 +418,7 @@ export default function App() {
       if (!text.trim()) return;
       e.preventDefault();
       if (isSkippable(text.trim())) {
-        pushToast("warn", "剪贴板是链接或内容过短，已跳过自动处理");
+        pushToast("warn", tr("toast.skippable"));
         return;
       }
       setSource(text.trim());
@@ -401,7 +428,7 @@ export default function App() {
         setResult(cached); setStatus("done"); setError(null); setCopied(null);
         runSigRef.current = [modeRef.current, styleRef.current, directionRef.current, text.trim()].join("|");
         fromHistoryRef.current = true;
-        pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source); } });
+        pushToast("accent", tr("toast.history"), { label: tr("toast.history.rerun"), onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source); } });
         return;
       }
       void runProcess(modeRef.current, text.trim());
@@ -430,7 +457,7 @@ export default function App() {
       passcodeRef.current = passcode;
       setAuth("ok");
       setHistory(await listHistory());
-      if (!silent) pushToast("warn", "网络异常，已离线进入（AI 功能暂不可用）");
+      if (!silent) pushToast("warn", tr("toast.offline"));
       return true;
     }
   }, [pushToast]);
@@ -474,7 +501,7 @@ export default function App() {
       setSource(paramText.trim());
       const m = paramMode && ["translate", "grammar", "polish"].includes(paramMode)
         ? (paramMode as Mode) : modeRef.current;
-      pushToast("accent", "URL 参数文本已载入，剪贴板监控暂停");
+      pushToast("accent", tr("toast.urlLoaded"));
       setTimeout(() => void runProcess(m, paramText.trim()), 100);
       // 清除 URL 参数（避免刷新重复处理）
       window.history.replaceState({}, "", window.location.pathname);
@@ -516,32 +543,33 @@ export default function App() {
   /* ── 渲染 ───────────────────────────── */
   if (auth !== "ok") {
     return (
-      <>
+      <I18nContext.Provider value={i18nValue}>
         <div className="bg-glow glow-a" />
         <div className="bg-glow glow-b" />
         {auth === "locked" ? (
           <LockScreen passcode={passcodeInput} onPasscode={setPasscodeInput} onUnlock={() => void unlock()} shake={lockShake} buildId={APP_BUILD_ID} />
         ) : (
-          <div className="lock-screen"><div className="lock-sub">正在验证口令…</div></div>
+          <div className="lock-screen"><div className="lock-sub">{tr("toast.verifying")}</div></div>
         )}
         <Toaster items={toasts} />
-      </>
+      </I18nContext.Provider>
     );
   }
 
   const clipPillState = !settings.autoRead ? "off" : clipState;
-  let stripText = "待机 — 激活窗口时将自动读取剪贴板";
+  let stripText = tr("status.idle");
   let stripTone = "";
-  if (status === "processing") { stripText = `正在处理 · ${MODE_LABELS[mode]}中…`; stripTone = "busy"; }
+  if (status === "processing") { stripText = tr("status.processing", { mode: modeLabel(mode) }); stripTone = "busy"; }
   else if (status === "error" && error) { stripText = error.title; stripTone = "err"; }
   else if (status === "done") {
-    stripText = `已完成 · 用时 ${elapsed}` + (copied === "auto" ? " · 已写回剪贴板" : "");
+    stripText = tr("status.done", { elapsed }) + (copied === "auto" ? tr("status.done.copied") : "");
     stripTone = "ok";
   } else if (source) {
-    stripText = `就绪 · ${MODE_LABELS[mode]}模式（上次使用，已记忆）`;
+    stripText = tr("status.ready", { mode: modeLabel(mode) });
   }
 
   return (
+    <I18nContext.Provider value={i18nValue}>
     <>
       <div className="bg-glow glow-a" />
       <div className="bg-glow glow-b" />
@@ -560,14 +588,14 @@ export default function App() {
 
         <div className={"status-strip " + stripTone}>
           <span>{stripText}</span>
-          <span className="status-hint">⌘⏎ 运行 · ⌘⇧C 复制结果</span>
+          <span className="status-hint">{tr("status.hint")}</span>
           <button
             className={"chip clickable ver-chip" + (outdated ? " accent" : " dim")}
             title={outdated
-              ? `当前 ${APP_BUILD_ID}，线上已有新版本 · 点击刷新`
-              : `当前版本 ${APP_BUILD_ID}${APP_BUILT_AT ? ` · 构建于 ${formatBuiltAt(APP_BUILT_AT)}` : ""} · 点击检查更新`}
+              ? tr("status.ver.outdatedTitle", { id: APP_BUILD_ID })
+              : tr("status.ver.title", { id: APP_BUILD_ID, built: APP_BUILT_AT ? tr("status.ver.built", { time: formatBuiltAt(APP_BUILT_AT) }) : "" })}
             onClick={() => { if (outdated) void activateUpdate(); else void checkVersion(true); }}
-          >{outdated ? "有新版本 · 刷新" : APP_BUILD_ID}</button>
+          >{outdated ? tr("status.ver.outdated") : APP_BUILD_ID}</button>
         </div>
 
         <main className="workbench">
@@ -581,9 +609,9 @@ export default function App() {
               const clip = await readClipboard();
               if (clip.ok) {
                 setSource(clip.value);
-                pushToast("ok", "已粘贴剪贴板内容");
+                pushToast("ok", tr("toast.pasted"));
               } else {
-                pushToast("warn", clip.reason === "denied" ? "无法读取剪贴板（未授权或浏览器限制）" : "剪贴板为空");
+                pushToast("warn", clip.reason === "denied" ? tr("toast.clipUnreadable") : tr("toast.clipEmpty"));
               }
             }}
             onClear={() => { setSource(""); setStatus("idle"); setResult(null); setError(null); setCopied(null); }}
@@ -601,7 +629,7 @@ export default function App() {
             onCopyNotes={() => {
               if (!result?.changes?.length) return;
               const notes = result.changes
-                .map((c, i) => `${i + 1}. ${c.original} → ${c.revised}\n   理由：${c.reason}`)
+                .map((c, i) => `${i + 1}. ${c.original} → ${c.revised}\n   ${tr("result.notes.reason")}: ${c.reason}`)
                 .join("\n");
               void copyNow(notes);
             }}
@@ -637,10 +665,10 @@ export default function App() {
             setCopied(null);
             runSigRef.current = [it.mode, styleRef.current, directionRef.current, it.source.trim()].join("|");
             setShowHistory(false);
-            pushToast("accent", "已载入历史记录");
+            pushToast("accent", tr("toast.historyLoaded"));
           }}
           onDelete={(id) => { void deleteHistory(id).then(() => listHistory()).then(setHistory); }}
-          onClear={() => { void clearHistory().then(() => setHistory([])); pushToast("ok", "历史已清空"); }}
+          onClear={() => { void clearHistory().then(() => setHistory([])); pushToast("ok", tr("toast.historyCleared")); }}
         />
 
         <SettingsDrawer
@@ -667,7 +695,7 @@ export default function App() {
               setCustomStyle(v);
               setStyle("custom");
               setShowCustom(false);
-              pushToast("ok", "自定义风格已保存");
+              pushToast("ok", tr("toast.customSaved"));
             }}
           />
         ) : null}
@@ -675,11 +703,12 @@ export default function App() {
           <PromptManagerModal
             prompts={customPrompts}
             onClose={() => setShowPrompts(false)}
-            onSave={(p) => { setCustomPrompts(p); setShowPrompts(false); pushToast("ok", "提示词已保存到本机"); }}
+            onSave={(p) => { setCustomPrompts(p); setShowPrompts(false); pushToast("ok", tr("toast.promptsSaved")); }}
           />
         ) : null}
       </div>
       <Toaster items={toasts} />
     </>
+    </I18nContext.Provider>
   );
 }

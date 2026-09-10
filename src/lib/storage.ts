@@ -47,7 +47,7 @@ export const storage = {
     localStorage.setItem(KEYS.mode, v);
   },
   getSettings(): Settings {
-    const defaults: Settings = { autoRead: true, autoCopy: true, model: "qwen3", explainLang: "zh" };
+    const defaults: Settings = { autoRead: true, autoCopy: true, model: "qwen3", explainLang: "zh", uiLang: "en" };
     const saved = loadJSON<unknown>(KEYS.settings, null);
     // localStorage 可能被写坏（"null"、数组、缺字段），逐项校验后再合并，避免 undefined 传播
     if (!saved || typeof saved !== "object" || Array.isArray(saved)) return defaults;
@@ -58,6 +58,7 @@ export const storage = {
       autoCopy: typeof s.autoCopy === "boolean" ? s.autoCopy : defaults.autoCopy,
       model: validModels.includes(s.model as ModelId) ? (s.model as ModelId) : defaults.model,
       explainLang: s.explainLang === "en" ? "en" : defaults.explainLang,
+      uiLang: s.uiLang === "zh" ? "zh" : defaults.uiLang,
     };
   },
   setSettings(s: Settings) {

@@ -1,6 +1,7 @@
 import { Icon } from "./Icon";
-import { MODE_LABELS, MODEL_INFO } from "../lib/types";
+import { MODEL_INFO } from "../lib/types";
 import type { Mode, ModelId, Usage } from "../lib/types";
+import { useI18n } from "../lib/i18n";
 
 interface Props {
   mode: Mode;
@@ -15,37 +16,40 @@ interface Props {
 }
 
 export function TopBar({ mode, onMode, clipState, usage, currentModel, onHistory, onSettings, onToggleTheme, resolvedTheme }: Props) {
-  const clipText = clipState === "denied" ? "剪贴板 · 需要授权" : clipState === "off" ? "自动读取 关" : "剪贴板监听中";
+  const { t } = useI18n();
+  const clipText = clipState === "denied" ? t("topbar.clip.denied") : clipState === "off" ? t("topbar.clip.off") : t("topbar.clip.on");
   const usageClass = usage ? (usage.used >= usage.limit ? " err" : usage.used >= usage.limit * 0.9 ? " warn" : "") : "";
+  const modelName = MODEL_INFO[currentModel]?.name ?? currentModel;
+  const modelNeurons = MODEL_INFO[currentModel]?.neurons ?? "?";
   return (
     <header className="topbar">
       <div className="brand">
         <span className="brand-mark"><Icon name="translate" size={17} /></span>
-        <span className="brand-name">邻语 <span style={{ opacity: 0.55 }}>Lingyu</span></span>
+        <span className="brand-name">{t("brand")}</span>
       </div>
-      <nav className="mode-tabs" aria-label="处理模式">
+      <nav className="mode-tabs" aria-label={t("topbar.modes.aria")}>
         <button className={"mode-tab" + (mode === "translate" ? " active" : "")} onClick={() => onMode("translate")}>
-          <Icon name="translate" size={15} />翻译
+          <Icon name="translate" size={15} />{t("mode.translate")}
         </button>
         <button className={"mode-tab" + (mode === "grammar" ? " active" : "")} onClick={() => onMode("grammar")}>
-          <Icon name="spellcheck" size={15} />语法检查
+          <Icon name="spellcheck" size={15} />{t("mode.grammar")}
         </button>
         <button className={"mode-tab" + (mode === "polish" ? " active" : "")} onClick={() => onMode("polish")}>
-          <Icon name="wand" size={15} />润色
+          <Icon name="wand" size={15} />{t("mode.polish")}
         </button>
       </nav>
       <div className="spacer" />
       <span className={"pill clip-pill " + clipState}>
         <span className="clip-dot" />{clipText}
       </span>
-      <span className={"pill" + usageClass} title={`模型: ${MODEL_INFO[currentModel]?.name ?? currentModel} · 每次约 ${MODEL_INFO[currentModel]?.neurons ?? "?"} 神经元`}>
+      <span className={"pill" + usageClass} title={t("topbar.usage.title", { model: modelName, n: modelNeurons })}>
         <Icon name="zap" size={12} />
         {usage ? `AI ${usage.used}/${usage.limit}` : "AI —"}
-        <span style={{ opacity: 0.5, marginLeft: 4, fontSize: 10 }}>≈{MODEL_INFO[currentModel]?.neurons ?? "?"}n</span>
+        <span style={{ opacity: 0.5, marginLeft: 4, fontSize: 10 }}>≈{modelNeurons}n</span>
       </span>
-      <button className="icon-btn" title="历史记录" aria-label="历史记录" onClick={onHistory}><Icon name="history" size={17} /></button>
-      <button className="icon-btn" title="设置" aria-label="设置" onClick={onSettings}><Icon name="settings" size={17} /></button>
-      <button className="icon-btn" title={resolvedTheme === "dark" ? "切换浅色" : "切换深色"} aria-label="切换主题" onClick={onToggleTheme}>
+      <button className="icon-btn" title={t("topbar.history")} aria-label={t("topbar.history")} onClick={onHistory}><Icon name="history" size={17} /></button>
+      <button className="icon-btn" title={t("topbar.settings")} aria-label={t("topbar.settings")} onClick={onSettings}><Icon name="settings" size={17} /></button>
+      <button className="icon-btn" title={resolvedTheme === "dark" ? t("topbar.theme.toLight") : t("topbar.theme.toDark")} aria-label={t("topbar.theme.aria")} onClick={onToggleTheme}>
         <Icon name={resolvedTheme === "dark" ? "sun" : "moon"} size={16} />
       </button>
     </header>
@@ -54,8 +58,4 @@ export function TopBar({ mode, onMode, clipState, usage, currentModel, onHistory
 
 export function modelLabel(model: ModelId): string {
   return MODEL_INFO[model]?.name ?? model;
-}
-
-export function modeTitle(mode: Mode): string {
-  return MODE_LABELS[mode];
 }

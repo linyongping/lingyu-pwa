@@ -1,16 +1,12 @@
-import { STYLES } from "./types";
 import type { Direction, HistoryItem, Mode, StyleId } from "./types";
 
 /**
  * 判断历史记录能否作为当前请求的缓存命中：
- * 原文 + 模式一致；润色还要求风格一致；翻译锁定方向时不得命中相反方向/无方向信息的旧记录。
+ * 原文 + 模式一致；润色还要求风格一致（styleLabel 存的是风格 id）；翻译锁定方向时不得命中相反方向/无方向信息的旧记录。
  */
 export function historyMatches(item: HistoryItem, text: string, mode: Mode, style: StyleId, direction: Direction): boolean {
   if (item.source !== text || item.mode !== mode) return false;
-  if (mode === "polish") {
-    const label = STYLES.find((s) => s.id === style)?.label ?? null;
-    if (item.styleLabel !== label) return false;
-  }
+  if (mode === "polish" && item.styleLabel !== style) return false;
   if (mode === "translate" && (direction === "zh2en" || direction === "en2zh")) {
     if (item.direction !== direction) return false;
   }

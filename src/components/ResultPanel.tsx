@@ -1,7 +1,8 @@
 import { Icon } from "./Icon";
-import { MODE_LABELS, STYLES } from "../lib/types";
+import { STYLES } from "../lib/types";
 import type { ChangeItem, Direction, Mode, StyleId } from "../lib/types";
 import { buildDiffSegments } from "../lib/diff";
+import { useI18n, type MsgKey } from "../lib/i18n";
 
 export function DiffText({ corrected, changes }: { corrected: string; changes: ChangeItem[] }) {
   const segments = buildDiffSegments(corrected, changes);
@@ -19,9 +20,10 @@ export function DiffText({ corrected, changes }: { corrected: string; changes: C
 }
 
 export function ChangesList({ changes }: { changes: ChangeItem[] }) {
+  const { t } = useI18n();
   return (
     <div className="changes">
-      <div className="changes-title">改动说明 · {changes.length}</div>
+      <div className="changes-title">{t("result.changes.title", { n: changes.length })}</div>
       {changes.map((c, i) => (
         <div className="change-item" key={i}>
           <span className="change-no">{i + 1}</span>
@@ -66,14 +68,19 @@ interface ResultProps {
 }
 
 export function ResultPanel(props: ResultProps) {
+  const { t } = useI18n();
   const { mode, status, result, error, elapsed, showChanges, onToggleChanges, copied } = props;
-  const stageNames = ["读取剪贴板", "分析语言", mode === "translate" ? "生成译文" : mode === "grammar" ? "检查语法" : "润色语句"];
+  const stageNames = [
+    t("result.stage.read"),
+    t("result.stage.detect"),
+    mode === "translate" ? t("result.stage.translate") : mode === "grammar" ? t("result.stage.grammar") : t("result.stage.polish"),
+  ];
   const hasChanges = !!(result && result.changes && result.changes.length > 0);
 
   return (
-    <section className="glass panel" aria-label="处理结果">
+    <section className="glass panel" aria-label={t("result.aria")}>
       <div className="panel-head">
-        <span className="panel-title"><Icon name="wand" size={15} />{MODE_LABELS[mode]}结果</span>
+        <span className="panel-title"><Icon name="wand" size={15} />{t("result.title", { mode: t(`mode.${mode}` as MsgKey) })}</span>
         <div className="panel-head-right">
           {status === "done" && result ? <span className="chip dim">{elapsed}</span> : null}
         </div>
@@ -82,8 +89,8 @@ export function ResultPanel(props: ResultProps) {
         {status === "idle" ? (
           <div className="empty-state">
             <span className="empty-icon"><Icon name="wand" size={26} /></span>
-            <span className="empty-title">处理结果会出现在这里</span>
-            <span className="empty-sub">选择上方模式后，粘贴内容将自动处理；结果默认自动写回剪贴板。</span>
+            <span className="empty-title">{t("result.empty.title")}</span>
+            <span className="empty-sub">{t("result.empty.sub")}</span>
           </div>
         ) : null}
 
@@ -120,39 +127,39 @@ export function ResultPanel(props: ResultProps) {
           <div>
             <div className="result-meta">
               {mode === "translate" && result.direction ? (
-                <button className="chip accent clickable" onClick={props.onCycleDirection} title="点击切换方向锁定">
+                <button className="chip accent clickable" onClick={props.onCycleDirection} title={t("result.dir.title")}>
                   <Icon name="swap" size={12} />
                   {props.direction === "auto"
-                    ? "自动识别 · " + (result.direction === "zh2en" ? "中文 → English" : "English → 中文")
-                    : props.direction === "zh2en" ? "已锁定 中文 → English" : "已锁定 English → 中文"}
+                    ? t(result.direction === "zh2en" ? "result.dir.auto.zh2en" : "result.dir.auto.en2zh")
+                    : props.direction === "zh2en" ? t("result.dir.locked.zh2en") : t("result.dir.locked.en2zh")}
                 </button>
               ) : null}
               {mode === "polish" ? (
-                <span className="chip accent"><Icon name="wand" size={12} />{STYLES.find((s) => s.id === props.style)?.label ?? "正式"}风格</span>
+                <span className="chip accent"><Icon name="wand" size={12} />{t("result.style", { style: t(`style.${props.style}` as MsgKey) })}</span>
               ) : null}
-              {mode !== "translate" && hasChanges ? <span className="chip ok">{result.changes!.length} 处改动</span> : null}
+              {mode !== "translate" && hasChanges ? <span className="chip ok">{t("result.changes", { n: result.changes!.length })}</span> : null}
               {props.fromHistory ? (
                 <span className="chip dim" style={{ marginLeft: 8 }}>
                   <Icon name="history" size={11} />
-                  历史命中
+                  {t("result.history.hit")}
                   <button
                     className="btn ghost small"
                     style={{ marginLeft: 4, height: 20, padding: "0 8px", fontSize: 10.5 }}
                     onClick={props.onRerun}
-                    title="忽略历史，重新调用 AI"
-                  >重新处理</button>
+                    title={t("result.rerun.title")}
+                  >{t("result.rerun")}</button>
                 </span>
               ) : null}
             </div>
 
             {mode === "polish" ? (
               <div className="style-row">
-                {STYLES.map((s) => (
+                {STYLES.map((id) => (
                   <button
-                    key={s.id}
-                    className={"style-chip" + (props.style === s.id ? " sel" : "")}
-                    onClick={() => (s.id === "custom" ? props.onEditCustom() : props.onStyle(s.id))}
-                  >{s.label}</button>
+                    key={id}
+                    className={"style-chip" + (props.style === id ? " sel" : "")}
+                    onClick={() => (id === "custom" ? props.onEditCustom() : props.onStyle(id))}
+                  >{t(`style.${id}` as MsgKey)}</button>
                 ))}
               </div>
             ) : null}
@@ -167,9 +174,9 @@ export function ResultPanel(props: ResultProps) {
             {mode === "polish" && hasChanges ? (
               <div className="changes">
                 <div className="changes-title">
-                  改动说明 · {result.changes!.length}
+                  {t("result.changes.title", { n: result.changes!.length })}
                   <button className="btn ghost small changes-toggle" onClick={onToggleChanges}>
-                    <Icon name={showChanges ? "chevron" : "eye"} size={13} />{showChanges ? "收起" : "显示改动"}
+                    <Icon name={showChanges ? "chevron" : "eye"} size={13} />{showChanges ? t("result.collapse") : t("result.showChanges")}
                   </button>
                 </div>
                 {showChanges ? <ChangesList changes={result.changes!} /> : null}
@@ -181,17 +188,17 @@ export function ResultPanel(props: ResultProps) {
       <div className="panel-foot">
         {status === "done" && result ? (
           <>
-            {copied === "auto" ? <span className="copy-ok"><Icon name="check" size={13} />已自动写回剪贴板 · 切回文档 ⌘V 粘贴</span> : null}
-            {copied === "manual" ? <span className="copy-ok"><Icon name="check" size={13} />已复制</span> : null}
-            {copied === "failed" ? <span className="copy-fail"><Icon name="alert" size={13} />复制失败，请手动选择复制</span> : null}
-            {copied === "pending" ? <span className="copy-ok"><Icon name="check" size={13} />切回窗口后将自动写入剪贴板</span> : null}
-            {copied === null ? <span style={{ opacity: 0.75 }}>结果已就绪</span> : null}
+            {copied === "auto" ? <span className="copy-ok"><Icon name="check" size={13} />{t("result.copied.auto")}</span> : null}
+            {copied === "manual" ? <span className="copy-ok"><Icon name="check" size={13} />{t("result.copied.manual")}</span> : null}
+            {copied === "failed" ? <span className="copy-fail"><Icon name="alert" size={13} />{t("result.copied.failed")}</span> : null}
+            {copied === "pending" ? <span className="copy-ok"><Icon name="check" size={13} />{t("result.copied.pending")}</span> : null}
+            {copied === null ? <span style={{ opacity: 0.75 }}>{t("result.ready")}</span> : null}
             <div className="spacer" />
-            {hasChanges ? <button className="btn small" onClick={props.onCopyNotes}><Icon name="copy" size={12} />复制说明</button> : null}
-            <button className="btn accent small" onClick={props.onCopyResult}><Icon name="copy" size={12} />复制结果</button>
+            {hasChanges ? <button className="btn small" onClick={props.onCopyNotes}><Icon name="copy" size={12} />{t("result.copyNotes")}</button> : null}
+            <button className="btn accent small" onClick={props.onCopyResult}><Icon name="copy" size={12} />{t("result.copyResult")}</button>
           </>
         ) : (
-          <span style={{ opacity: 0.75 }}>AI 结果 · {props.modelLabel}（Workers AI）</span>
+          <span style={{ opacity: 0.75 }}>{t("result.aiFooter", { model: props.modelLabel })}</span>
         )}
       </div>
     </section>

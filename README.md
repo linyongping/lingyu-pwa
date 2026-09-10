@@ -13,6 +13,7 @@
 - **PWA**：vite-plugin-pwa（Service Worker 预缓存壳 + manifest + 图标）
 - **存储**：历史记录 IndexedDB（本地，最多 200 条）；每日用量 Durable Object 原子计数（硬限 3000 次/天，KV 作为未绑定时的回退）
 - **口令**：Worker secret `PASSCODE`，`X-Passcode` 头 + 常数时间比对
+- **界面语言**：中文 / English，**默认 English**；设置内切换，存本机（`ly_settings.uiLang`），并同步 `<html lang>` 与页面标题。文案集中在 [src/lib/i18n.ts](src/lib/i18n.ts)（EN 为键定义，ZH 需逐键齐全）。AI 提示词与「说明语言」是独立设置，不受界面语言影响。
 
 ## 用量计数
 
@@ -77,6 +78,7 @@ npm run deploy     # 构建并 wrangler deploy（自动使用 dist/lingyu/wrangl
 /opt/homebrew/opt/python@3.11/bin/python3.11 scripts/e2e.py
 # 对生产站跑 11 项断言：锁屏/口令/引导/自动读取/写回/防重/方向识别/语法高亮/用量/历史/超长拦截
 # 需 homebrew 的 playwright（chromium headless shell）；可用 E2E_BASE / E2E_PASSCODE 覆盖目标
+# 注：脚本固定 uiLang=zh（断言中文文案）；界面默认语言为 English
 ```
 
 ## API
