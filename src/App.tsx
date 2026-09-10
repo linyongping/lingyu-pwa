@@ -70,6 +70,7 @@ export default function App() {
   const clipWarnedRef = useRef(false);
   const fromHistoryRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  const textParamActiveRef = useRef(false);
   const historyRef = useRef(history);
   historyRef.current = history;
   const usageRef = useRef(usage);
@@ -244,6 +245,7 @@ export default function App() {
   /* ── 剪贴板自动读取 ──────────────────── */
   const simulateFocusRead = useCallback(async () => {
     if (authRef.current !== "ok" || busyRef.current) return;
+    if (textParamActiveRef.current) return; // URL 参数文本模式，暂停剪贴板读取
     if (!settingsRef.current.autoRead) {
       if (!clipWarnedRef.current) pushToast("warn", "自动读取已关闭（设置中可开启）");
       clipWarnedRef.current = true;
@@ -409,6 +411,38 @@ export default function App() {
     }
   }, [passcodeInput, tryUnlock, simulateFocusRead]);
 
+  /* ── URL 参数处理：?mode=xxx&text=xxx ──── */
+  useEffect(() => {
+    if (auth !== "ok") return;
+    const params = new URLSearchParams(window.location.search);
+    const paramMode = params.get("mode");
+    const paramText = params.get("text");
+
+    // 处理 mode 参数
+    if (paramMode && ["translate", "grammar", "polish"].includes(paramMode)) {
+      setMode(paramMode as Mode);
+    }
+
+    // 处理 text 参数（最高优先级，暂停剪贴板监控）
+    if (paramText && paramText.trim()) {
+      textParamActiveRef.current = true;
+      setSource(paramText.trim());
+      const m = paramMode && ["translate", "grammar", "polish"].includes(paramMode)
+        ? (paramMode as Mode) : modeRef.current;
+      pushToast("accent", "URL 参数文本已载入，剪贴板监控暂停");
+      setTimeout(() => void runProcess(m, paramText.trim(), { auto: true }), 100);
+      // 清除 URL 参数（避免刷新重复处理）
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+
+    // 无 text 参数时正常读取剪贴板
+    if (!textParamActiveRef.current) {
+      setTimeout(() => void simulateFocusRead(), 600);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth]);
+
   const finishOnboard = useCallback(() => {
     setShowOnboard(false);
     storage.setOnboarded();
@@ -488,7 +522,7 @@ export default function App() {
           <SourcePanel
             mode={mode}
             source={source}
-            onSource={setSource}
+            onSource={(v) => { textParamActiveRef.current = false; setSource(v); }}
             busy={status === "processing"}
             onRun={() => void runProcess(mode, source, {})}
             onPaste={async () => {
