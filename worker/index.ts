@@ -1,6 +1,6 @@
 import { tracing } from "cloudflare:workers";
 import { buildMessages, DEFAULT_MODEL, MODELS, NEURON_ESTIMATE } from "./prompts";
-import { detectLang, langMismatch, parseModelJson, stripToFallbackText } from "./lang";
+import { detectLang, langMismatch, parseModelJson, salvageResult, stripToFallbackText } from "./lang";
 import { incrementUsage, readUsage } from "./usage";
 import type { Env, ProcessBody } from "./types";
 
@@ -168,10 +168,10 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
 
   let parsed = parseModelJson(raw);
   if (!parsed) {
-    // 重试一次，强调只输出 JSON
+    // 重试一次，强调只输出严格 JSON（小模型常出现未转义换行/尾逗号）
     const retryMessages = [
       ...messages,
-      { role: "system" as const, content: "Your previous output was not valid JSON. Output exactly one JSON object and nothing else." },
+      { role: "system" as const, content: 'Your previous output was not valid JSON. Output exactly one JSON object and nothing else. Use double quotes, escape newlines as \\n inside strings, and do not add trailing commas.' },
     ];
     try {
       rawOut = await callChat(retryMessages);
@@ -182,26 +182,10 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
     }
   }
 
-  // 语言一致性守卫：润色/校对必须与原文同语言。模型若「翻译了」，重试一次；仍不符则退回原文，
-  // 避免把译文当润色结果返回（中文输入被译成英文、或英文被译成中文等）。
-  const expectLang = mode === "polish" || mode === "grammar" ? detectLang(text) : null;
-  if (parsed && expectLang && langMismatch(text, parsed.result)) {
-    try {
-      const guard = [
-        ...messages,
-        { role: "system" as const, content: `Wrong output language: it must match the source (${expectLang === "zh" ? "Chinese" : "English"}) and must not be a translation. Output exactly one JSON object.` },
-      ];
-      const out2 = await callChat(guard);
-      const p2 = parseModelJson(extractText(out2));
-      if (p2) {
-        rawOut = out2; raw = extractText(out2); parsed = p2;
-      }
-    } catch {
-      // 保持原结果，交给下面的兜底判断
-    }
-    if (langMismatch(text, parsed.result)) {
-      parsed = { result: text, changes: null };
-    }
+  // JSON 轻微破损：尽力从文本里取出 result 字段，避免把 JSON 原文当结果显示
+  if (!parsed) {
+    const salvaged = salvageResult(raw);
+    if (salvaged) parsed = { result: salvaged, changes: null };
   }
 
   if (!parsed) {
@@ -211,6 +195,28 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
       return json(502, { error: { code: "bad_output", message: "模型没有返回可用内容", raw: describeRaw(rawOut) } });
     }
     parsed = { result: fallback, changes: null };
+  }
+
+  // 语言一致性守卫：润色/校对必须与原文同语言。模型若「翻译了」，重试一次；仍不符则退回原文，
+  // 避免把译文当润色结果返回（中文输入被译成英文、或英文被译成中文等）。
+  const expectLang = mode === "polish" || mode === "grammar" ? detectLang(text) : null;
+  if (expectLang && langMismatch(text, parsed.result)) {
+    try {
+      const guard = [
+        ...messages,
+        { role: "system" as const, content: `Wrong output language: it must match the source (${expectLang === "zh" ? "Chinese" : "English"}) and must not be a translation. Output exactly one JSON object.` },
+      ];
+      const out2 = await callChat(guard);
+      const p2 = parseModelJson(extractText(out2)) ?? (() => { const s = salvageResult(extractText(out2)); return s ? { result: s, changes: null } : null; })();
+      if (p2) {
+        rawOut = out2; raw = extractText(out2); parsed = p2;
+      }
+    } catch {
+      // 保持原结果，交给下面的兜底判断
+    }
+    if (langMismatch(text, parsed.result)) {
+      parsed = { result: text, changes: null };
+    }
   }
 
   const neuronEstimate = NEURON_ESTIMATE[modelKey] ?? 5;

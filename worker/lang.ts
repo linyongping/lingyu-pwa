@@ -65,3 +65,18 @@ export function stripToFallbackText(raw: string): string {
   const body = fenced ? fenced[1] : raw;
   return body.trim();
 }
+
+/**
+ * 模型 JSON 轻微破损时的兜底：用正则尽力提取 "result" 字段（小模型常出现未转义换行/尾逗号）。
+ * 返回 null 表示取不到。
+ */
+export function salvageResult(raw: string): string | null {
+  const m = raw.match(/"result"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+  if (!m) return null;
+  try {
+    const decoded = JSON.parse(`"${m[1]}"`) as string;
+    return decoded.trim() || null;
+  } catch {
+    return m[1].trim() || null;
+  }
+}
