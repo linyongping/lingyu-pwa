@@ -15,7 +15,7 @@ import { storage } from "./lib/storage";
 import { APP_BUILD_ID, APP_BUILT_AT, activateUpdate, fetchDeployedBuild, formatBuiltAt } from "./lib/version";
 import { I18nContext, translate, type MsgKey, type TVars } from "./lib/i18n";
 import { DEDUPE_WINDOW } from "./lib/types";
-import type { Direction, HistoryItem, Mode, ProcessOk, Settings, StyleId, Usage } from "./lib/types";
+import type { ChangeItem, Direction, HistoryItem, Mode, ProcessOk, Settings, StyleId, Usage } from "./lib/types";
 
 type Auth = "checking" | "ok" | "locked";
 type Status = "idle" | "processing" | "done" | "error";
@@ -55,6 +55,9 @@ export default function App() {
   const [usage, setUsage] = useState<Usage | null>(null);
   const [clipState, setClipState] = useState<"on" | "denied" | "off">("on");
   const [outdated, setOutdated] = useState(false);
+  // 语法检查结果上的「更地道表达」：仅手动触发，不写回剪贴板、不进历史
+  const [natural, setNatural] = useState<{ text: string; changes: ChangeItem[] | null } | null>(null);
+  const [naturalState, setNaturalState] = useState<"idle" | "loading" | "done" | "error">("idle");
 
   const { toasts, pushToast } = useToasts();
 
@@ -211,6 +214,8 @@ export default function App() {
       setResult(resp);
       setUsage(resp.usage);
       setStatus("done");
+      setNatural(null);
+      setNaturalState("idle");
       runSigRef.current = [modeArg, styleRef.current, directionRef.current, t].join("|");
       lastSourceRef.current = t;
       fromHistoryRef.current = false;
@@ -271,6 +276,42 @@ export default function App() {
       if (abortRef.current === controller) busyRef.current = false;
     }
   }, [customStyle, deliverResult, pushToast]);
+
+  /* ── 更地道的英文表达（语法检查结果上的手动动作）── */
+  const runNatural = useCallback(async () => {
+    const base = (result?.result ?? source).trim();
+    if (!base) return;
+    setNaturalState("loading");
+    busyRef.current = true;
+    try {
+      const resp = await processText({
+        passcode: passcodeRef.current,
+        mode: "natural",
+        text: base,
+        direction: "auto",
+        style: styleRef.current,
+        customPrompt: "",
+        explainLang: settingsRef.current.explainLang,
+        model: settingsRef.current.model,
+      });
+      setNatural({ text: resp.result, changes: resp.changes });
+      setNaturalState("done");
+      setUsage(resp.usage);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "invalid_passcode") {
+        setAuth("locked");
+        pushToast("err", tr("toast.passcodeInvalid"));
+      }
+      setNaturalState("error");
+    } finally {
+      busyRef.current = false;
+    }
+  }, [result, source, pushToast, tr]);
+
+  const resetNatural = useCallback(() => {
+    setNatural(null);
+    setNaturalState("idle");
+  }, []);
 
   /* 模式 / 风格 / 方向变化时按新参数重跑 */
   useEffect(() => {
@@ -576,7 +617,7 @@ export default function App() {
       <div className="app">
         <TopBar
           mode={mode}
-          onMode={(m) => { setMode(m); setShowChanges(false); }}
+          onMode={(m) => { setMode(m); setShowChanges(false); resetNatural(); }}
           clipState={clipPillState}
           usage={usage}
           currentModel={settings.model}
@@ -602,7 +643,7 @@ export default function App() {
           <SourcePanel
             mode={mode}
             source={source}
-            onSource={(v) => { textParamActiveRef.current = false; userEditRef.current = true; setSource(v); }}
+            onSource={(v) => { textParamActiveRef.current = false; userEditRef.current = true; setSource(v); resetNatural(); }}
             busy={status === "processing"}
             onRun={() => void runProcess(mode, source)}
             onPaste={async () => {
@@ -614,7 +655,7 @@ export default function App() {
                 pushToast("warn", clip.reason === "denied" ? tr("toast.clipUnreadable") : tr("toast.clipEmpty"));
               }
             }}
-            onClear={() => { setSource(""); setStatus("idle"); setResult(null); setError(null); setCopied(null); }}
+            onClear={() => { setSource(""); setStatus("idle"); setResult(null); setError(null); setCopied(null); resetNatural(); }}
           />
           <ResultPanel
             mode={mode}
@@ -645,6 +686,10 @@ export default function App() {
             modelLabel={modelLabel(settings.model)}
             fromHistory={fromHistoryRef.current}
             onRerun={() => { fromHistoryRef.current = false; void runProcess(mode, source); }}
+            natural={natural}
+            naturalState={naturalState}
+            onNatural={() => void runNatural()}
+            onCopyNatural={() => natural && void copyNow(natural.text)}
           />
         </main>
 
@@ -665,6 +710,7 @@ export default function App() {
             setCopied(null);
             runSigRef.current = [it.mode, styleRef.current, directionRef.current, it.source.trim()].join("|");
             setShowHistory(false);
+            resetNatural();
             pushToast("accent", tr("toast.historyLoaded"));
           }}
           onDelete={(id) => { void deleteHistory(id).then(() => listHistory()).then(setHistory); }}

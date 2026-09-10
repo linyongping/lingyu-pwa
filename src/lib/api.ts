@@ -1,4 +1,4 @@
-import type { ModelId, ProcessOk, Usage } from "./types";
+import type { ApiMode, ModelId, ProcessOk, Usage } from "./types";
 import { CHAR_MAX } from "./types";
 
 export class ApiError extends Error {
@@ -51,7 +51,7 @@ export async function fetchUsage(passcode: string): Promise<Usage> {
 
 export interface ProcessParams {
   passcode: string;
-  mode: "translate" | "grammar" | "polish";
+  mode: ApiMode;
   text: string;
   direction: "auto" | "zh2en" | "en2zh";
   style: string;

@@ -1,3 +1,4 @@
+import { MODEL_INFO } from "./types";
 import type { ModelId, Settings } from "./types";
 
 const KEYS = {
@@ -52,7 +53,7 @@ export const storage = {
     // localStorage 可能被写坏（"null"、数组、缺字段），逐项校验后再合并，避免 undefined 传播
     if (!saved || typeof saved !== "object" || Array.isArray(saved)) return defaults;
     const s = saved as Record<string, unknown>;
-    const validModels: ModelId[] = ["qwen3", "qwen3_8", "m2m100", "llama32_1b"];
+    const validModels = Object.keys(MODEL_INFO) as ModelId[];
     return {
       autoRead: typeof s.autoRead === "boolean" ? s.autoRead : defaults.autoRead,
       autoCopy: typeof s.autoCopy === "boolean" ? s.autoCopy : defaults.autoCopy,

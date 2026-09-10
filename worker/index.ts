@@ -61,6 +61,20 @@ function describeRaw(raw: unknown): string {
   }
 }
 
+/** 从模型响应里取真实 token 用量（chat 模型会带 usage；翻译模型通常没有） */
+function extractTokenUsage(raw: unknown): { prompt: number; completion: number } {
+  if (raw && typeof raw === "object") {
+    const u = (raw as Record<string, unknown>).usage;
+    if (u && typeof u === "object") {
+      const rec = u as Record<string, unknown>;
+      const prompt = Number(rec.prompt_tokens) || 0;
+      const completion = Number(rec.completion_tokens) || 0;
+      if (prompt || completion) return { prompt, completion };
+    }
+  }
+  return { prompt: 0, completion: 0 };
+}
+
 async function runModel(env: Env, modelId: string, messages: Array<{ role: string; content: string }>, temperature: number): Promise<unknown> {
   return env.AI.run(modelId, { messages, max_tokens: 8000, temperature });
 }
@@ -74,8 +88,8 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
   }
 
   const mode = body.mode;
-  if (mode !== "translate" && mode !== "grammar" && mode !== "polish") {
-    return json(400, errorBody("bad_mode", "mode 必须是 translate / grammar / polish"));
+  if (mode !== "translate" && mode !== "grammar" && mode !== "polish" && mode !== "natural") {
+    return json(400, errorBody("bad_mode", "mode 必须是 translate / grammar / polish / natural"));
   }
   const text = typeof body.text === "string" ? body.text.trim() : "";
   if (!text) return json(400, errorBody("empty_text", "文本为空"));
@@ -123,7 +137,7 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
     if (!translated) {
       return json(502, { error: { code: "bad_output", message: "模型没有返回可用内容" } });
     }
-    const usage = await incrementUsage(env);
+    const usage = await incrementUsage(env, { neurons: NEURON_ESTIMATE.m2m100 ?? 2 });
     return json(200, {
       result: translated,
       changes: null,
@@ -180,8 +194,9 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
     parsed = { result: fallback, changes: null };
   }
 
-  const usage = await incrementUsage(env);
   const neuronEstimate = NEURON_ESTIMATE[modelKey] ?? 5;
+  const tok = extractTokenUsage(rawOut);
+  const usage = await incrementUsage(env, { prompt: tok.prompt, completion: tok.completion, neurons: neuronEstimate });
   return json(200, {
     result: parsed.result,
     changes: parsed.changes,

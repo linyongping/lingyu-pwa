@@ -21,6 +21,16 @@ export function TopBar({ mode, onMode, clipState, usage, currentModel, onHistory
   const usageClass = usage ? (usage.used >= usage.limit ? " err" : usage.used >= usage.limit * 0.9 ? " warn" : "") : "";
   const modelName = MODEL_INFO[currentModel]?.name ?? currentModel;
   const modelNeurons = MODEL_INFO[currentModel]?.neurons ?? "?";
+  const usageTitle = [
+    t("topbar.usage.title", { model: modelName, n: modelNeurons }),
+    usage ? t("usage.requests", { used: usage.used, limit: usage.limit }) : null,
+    usage?.tokens
+      ? t("usage.tokens", { total: usage.tokens.total, prompt: usage.tokens.prompt, completion: usage.tokens.completion })
+      : t("usage.tokens.none"),
+    usage?.neurons
+      ? t(usage.neurons.estimated ? "usage.neurons.est" : "usage.neurons.real", { used: usage.neurons.used, limit: usage.neurons.limit })
+      : null,
+  ].filter(Boolean).join("\n");
   return (
     <header className="topbar">
       <div className="brand">
@@ -42,10 +52,12 @@ export function TopBar({ mode, onMode, clipState, usage, currentModel, onHistory
       <span className={"pill clip-pill " + clipState}>
         <span className="clip-dot" />{clipText}
       </span>
-      <span className={"pill" + usageClass} title={t("topbar.usage.title", { model: modelName, n: modelNeurons })}>
+      <span className={"pill" + usageClass} title={usageTitle}>
         <Icon name="zap" size={12} />
         {usage ? `AI ${usage.used}/${usage.limit}` : "AI —"}
-        <span style={{ opacity: 0.5, marginLeft: 4, fontSize: 10 }}>≈{modelNeurons}n</span>
+        <span style={{ opacity: 0.5, marginLeft: 4, fontSize: 10 }}>
+          {usage?.tokens ? t("usage.pill.tokens", { total: usage.tokens.total }) : `≈${modelNeurons}n`}
+        </span>
       </span>
       <button className="icon-btn" title={t("topbar.history")} aria-label={t("topbar.history")} onClick={onHistory}><Icon name="history" size={17} /></button>
       <button className="icon-btn" title={t("topbar.settings")} aria-label={t("topbar.settings")} onClick={onSettings}><Icon name="settings" size={17} /></button>

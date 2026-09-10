@@ -34,7 +34,8 @@
     }
   ],
   "vars": {
-    "DAILY_REQUEST_LIMIT": "3000"
+    "DAILY_REQUEST_LIMIT": "3000",
+    "DAILY_NEURON_LIMIT": "10000"
   },
   "observability": {
     "enabled": true,

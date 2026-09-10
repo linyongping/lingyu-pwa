@@ -65,6 +65,10 @@ interface ResultProps {
   modelLabel: string;
   fromHistory: boolean;
   onRerun: () => void;
+  natural: { text: string; changes: ChangeItem[] | null } | null;
+  naturalState: "idle" | "loading" | "done" | "error";
+  onNatural: () => void;
+  onCopyNatural: () => void;
 }
 
 export function ResultPanel(props: ResultProps) {
@@ -171,6 +175,32 @@ export function ResultPanel(props: ResultProps) {
             )}
 
             {mode === "grammar" && hasChanges ? <ChangesList changes={result.changes!} /> : null}
+            {mode === "grammar" ? (
+              <div className="changes" style={{ marginTop: 14 }}>
+                <div className="changes-title">
+                  {t("natural.title")}
+                  {props.naturalState === "done" ? (
+                    <button className="btn small" onClick={props.onCopyNatural}>
+                      <Icon name="copy" size={12} />{t("natural.copy")}
+                    </button>
+                  ) : (
+                    <button className="btn small" onClick={props.onNatural} disabled={props.naturalState === "loading"}>
+                      <Icon name="wand" size={12} />{props.naturalState === "loading" ? t("natural.loading") : t("natural.run")}
+                    </button>
+                  )}
+                </div>
+                <div className="set-desc" style={{ marginBottom: 8 }}>{t("natural.desc")}</div>
+                {props.naturalState === "error" ? (
+                  <div className="copy-fail"><Icon name="alert" size={13} />{t("natural.error")}</div>
+                ) : null}
+                {props.naturalState === "done" && props.natural ? (
+                  <>
+                    <div className="result-text">{props.natural.text}</div>
+                    {props.natural.changes && props.natural.changes.length ? <ChangesList changes={props.natural.changes} /> : null}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             {mode === "polish" && hasChanges ? (
               <div className="changes">
                 <div className="changes-title">

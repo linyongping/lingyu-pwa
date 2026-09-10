@@ -22,18 +22,26 @@
 - 绑定：`wrangler.jsonc` 的 `durable_objects` / `migrations`（`new_sqlite_classes`）。
 - 回退：若 `USAGE_DO` 未绑定或调用异常，自动回退到 `USAGE_KV`。**KV 无原子自增，高并发下为近似值（方向为少计）**，仅作兜底；正常部署请保留 DO 绑定。
 - 计数按 UTC 日期分桶，跨天归零；只有模型成功返回后才 +1（失败的请求不占额度）。
+- 同时累计**真实 token 用量**（取自模型响应的 `usage`）与 **neurons 估算值**（按模型 `NEURON_ESTIMATE` 累加，Workers AI 不通过 binding 暴露真实 neurons，UI 上以 ≈ 标注）。右上角用量 pill 悬停可查看：今日请求 / token / ≈neurons（对比 10000 免费额度，可用 `DAILY_NEURON_LIMIT` 调整）。
 
-## 模型（Workers Free 套餐实测可用）
+## 模型（Workers Free 套餐可用，ID 已对照官方目录核实）
 
 | key | 模型 ID | 定位 |
 |---|---|---|
 | `qwen3` | `@cf/qwen/qwen3-30b-a3b-fp8` | 默认 · 快速、省额度 |
 | `qwen3_8` | `@cf/qwen/qwen3.8-27b` | 旗舰 · 质量优先 |
 | `m2m100` | `@cf/meta/m2m100-1.2b` | 翻译专用 · 仅翻译模式可用（其它模式自动回退到默认模型） |
-| `llama32_1b` | `@cf/meta/llama-3.2-1b-instruct` | 极速 · 仅适合简单翻译 |
+| `llama32_1b` | `@cf/meta/llama-3.2-1b-instruct` | 极速 · 仅简单翻译 |
+| `llama32_3b` | `@cf/meta/llama-3.2-3b-instruct` | 经济 · 轻量 chat，日常够用 |
+| `llama31_8b_fast` | `@cf/meta/llama-3.1-8b-instruct-fast` | 经济 · 8B 快速版，质量与成本均衡 |
+| `granite_micro` | `@cf/ibm-granite/granite-4.0-h-micro` | 最省 · IBM Granite micro |
 
 > 模型 key 与前端可选列表见 [src/lib/types.ts](src/lib/types.ts) 的 `MODEL_INFO`，服务端白名单见 [worker/prompts.ts](worker/prompts.ts) 的 `MODELS`。
-> 以上 ID 已对照 Cloudflare 官方模型目录核实；`m2m100` 走翻译接口 `{text, source_lang, target_lang}`，返回 `translated_text`。
+> `m2m100` 走翻译接口 `{text, source_lang, target_lang}`，返回 `translated_text`。
+
+## 语法检查 · 更地道的英文表达
+
+语法检查结果下方有一个**手动按钮**（`Rewrite natively` / 生成地道表达）：点击后才调用 AI，把文本改写成英文母语者更自然的说法，含义不变。结果**不自动写回剪贴板、不进历史**，面板内提供复制按钮；切换模式/编辑原文/加载历史时自动清空。对应服务端任务 `mode: "natural"`。
 
 ## URL 参数
 
@@ -83,9 +91,10 @@ npm run deploy     # 构建并 wrangler deploy（自动使用 dist/lingyu/wrangl
 
 ## API
 
-- `GET /api/usage` → `{ used, limit, date }`
+- `GET /api/usage` → `{ used, limit, date, tokens: {prompt, completion, total}, neurons: {used, limit, estimated} }`
 - `POST /api/process` body `{ mode, text, direction?, style?, customPrompt?, explainLang?, model? }`
-  → `{ result, changes|null, detectedLang, direction|null, model, usage }`
-  错误：`401 invalid_passcode` / `422 too_long`（>4000 字符）/ `429 quota_exceeded` / `502 ai_error`
+  `mode`: `translate` / `grammar` / `polish` / `natural`（`natural` 由语法检查结果上的手动按钮触发）
+  → `{ result, changes|null, detectedLang, direction|null, model, neuronEstimate, usage }`
+  错误：`400 bad_mode` / `401 invalid_passcode` / `422 too_long`（>4000 字符）/ `429 quota_exceeded` / `502 ai_error` / `502 bad_output`
 
 两条接口都要求 `x-passcode` 头。

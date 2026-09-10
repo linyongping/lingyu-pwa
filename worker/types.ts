@@ -17,9 +17,12 @@ export interface Env {
   PASSCODE: string;
   /** 每日请求硬上限（字符串数字） */
   DAILY_REQUEST_LIMIT?: string;
+  /** 每日 neurons 参考上限（字符串数字，默认 10000 = Workers AI 免费额度） */
+  DAILY_NEURON_LIMIT?: string;
 }
 
-export type Mode = "translate" | "grammar" | "polish";
+// natural = 语法检查结果上的「英文母语者更地道的表达」手动改写
+export type Mode = "translate" | "grammar" | "polish" | "natural";
 export type Direction = "auto" | "zh2en" | "en2zh";
 export type StyleId = "formal" | "academic" | "concise" | "casual" | "custom";
 

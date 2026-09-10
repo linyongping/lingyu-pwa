@@ -2,26 +2,35 @@ import type { Direction, Mode, StyleId } from "./types";
 import { detectLang } from "./lang";
 
 /**
- * 模型白名单（均经实测在 Workers Free 套餐可用）：
+ * 模型白名单（ID 均对照 Cloudflare 官方模型目录核实）：
  * - qwen3: 默认 · 快速省额度（MoE 3B 激活，~10s）
  * - qwen3.8: 旗舰质量 · 多模态 · 262k 上下文
  * - m2m100: 翻译专用 · 100 语言 · 最便宜
  * - llama3.2_1b: 超轻量 · 极速 · 仅适合简单翻译
+ * - llama3.2_3b: 轻量 chat · 日常翻译/润色够用
+ * - llama3.1_8b_fast: 8B 快速版 · 质量与成本均衡
+ * - granite_micro: IBM Granite micro · 极省额度
  */
 export const MODELS: Record<string, string> = {
   qwen3: "@cf/qwen/qwen3-30b-a3b-fp8",
   qwen3_8: "@cf/qwen/qwen3.8-27b",
   m2m100: "@cf/meta/m2m100-1.2b",
   llama32_1b: "@cf/meta/llama-3.2-1b-instruct",
+  llama32_3b: "@cf/meta/llama-3.2-3b-instruct",
+  llama31_8b_fast: "@cf/meta/llama-3.1-8b-instruct-fast",
+  granite_micro: "@cf/ibm-granite/granite-4.0-h-micro",
 };
 export const DEFAULT_MODEL = "qwen3";
 
-/** 每次请求的估算神经元消耗（Workers AI 计费单位，仅供参考） */
+/** 每次请求的估算神经元消耗（Workers AI 计费单位，仅供参考；实际值以 Cloudflare 账单为准） */
 export const NEURON_ESTIMATE: Record<string, number> = {
   qwen3: 5,
   qwen3_8: 20,
   m2m100: 2,
   llama32_1b: 1,
+  llama32_3b: 2,
+  llama31_8b_fast: 4,
+  granite_micro: 1,
 };
 
 const STYLE_INSTRUCTIONS: Record<Exclude<StyleId, "custom">, string> = {
@@ -78,6 +87,17 @@ function polishSystem(style: StyleId, customPrompt: string, explainLang: "zh" | 
   ].join("\n");
 }
 
+function naturalSystem(explainLang: "zh" | "en"): string {
+  return [
+    "你是英文母语编辑。把用户文本用英语母语者最自然、地道的方式表达出来：原文为英文则做地道化改写，原文为中文则给出对应的地道英文表达。",
+    "规则：",
+    "1. 含义与全部信息保持不变，只调整句式、搭配、语序、用词，使其像母语者自然的说法；不新增观点，不遗漏信息。",
+    "2. 严格保留原文格式（换行、列表、代码块、专有名词）。",
+    '3. changes 数组列出主要地道化改动，每项 {"original":"原文片段","revised":"改写后片段（必须逐字出现在 result 中）","reason":"简要说明"}；reason 用' + explainIn(explainLang) + "。",
+    '4. 只输出一个 JSON 对象：{"result":"改写后的全文","changes":[...]}，不要输出任何其他内容。',
+  ].join("\n");
+}
+
 export function resolveDirection(text: string, pref: Direction): "zh2en" | "en2zh" | null {
   if (pref === "zh2en" || pref === "en2zh") return pref;
   return detectLang(text) === "zh" ? "zh2en" : "en2zh";
@@ -100,6 +120,9 @@ export function buildMessages(
   } else if (mode === "grammar") {
     system = grammarSystem(opts.explainLang);
     temperature = 0.1;
+  } else if (mode === "natural") {
+    system = naturalSystem(opts.explainLang);
+    temperature = 0.5;
   } else {
     system = polishSystem(opts.style, opts.customPrompt, opts.explainLang);
     temperature = 0.7;
