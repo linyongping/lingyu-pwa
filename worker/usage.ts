@@ -43,14 +43,15 @@ export function today(): { key: string; date: string } {
 
 function shape(cur: StoredUsage | null, date: string, limit: number, neuronLimit: number): Usage {
   const same = cur && cur.date === date ? cur : null;
-  const prompt = same?.prompt ?? 0;
-  const completion = same?.completion ?? 0;
+  // 兼容旧记录（没有 prompt/completion/neurons 字段）以及可能的 NaN
+  const prompt = Number(same?.prompt) || 0;
+  const completion = Number(same?.completion) || 0;
   return {
-    used: same?.used ?? 0,
+    used: Number(same?.used) || 0,
     limit,
     date,
     tokens: { prompt, completion, total: prompt + completion },
-    neurons: { used: same?.neurons ?? 0, limit: neuronLimit, estimated: true },
+    neurons: { used: Number(same?.neurons) || 0, limit: neuronLimit, estimated: true },
   };
 }
 
@@ -86,10 +87,10 @@ export class UsageCounter {
         const base = cur && cur.date === date ? cur : { date, used: 0, prompt: 0, completion: 0, neurons: 0 };
         const next: StoredUsage = {
           date,
-          used: base.used + 1,
-          prompt: base.prompt + (delta.prompt ?? 0),
-          completion: base.completion + (delta.completion ?? 0),
-          neurons: base.neurons + (delta.neurons ?? 0),
+          used: (Number(base.used) || 0) + 1,
+          prompt: (Number(base.prompt) || 0) + (delta.prompt ?? 0),
+          completion: (Number(base.completion) || 0) + (delta.completion ?? 0),
+          neurons: (Number(base.neurons) || 0) + (delta.neurons ?? 0),
         };
         await txn.put("usage", next);
         return next;
