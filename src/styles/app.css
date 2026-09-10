@@ -153,6 +153,7 @@ mark.ly-diff {
 .style-chip {
   border: 1px solid var(--border); background: var(--bg-elev); color: var(--text-2);
   font-family: inherit; font-size: 12px; padding: 4px 13px; border-radius: 999px; cursor: pointer; transition: all var(--speed);
+  white-space: nowrap;
 }
 .style-chip:hover { color: var(--text); border-color: var(--border-strong); }
 .style-chip.sel { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); font-weight: 600; }
@@ -196,7 +197,7 @@ mark.ly-diff {
 .scrim { position: fixed; inset: 0; z-index: 40; background: rgba(5, 7, 12, .45); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); animation: fade .2s ease; }
 html[data-theme="light"] .scrim { background: rgba(31, 41, 72, .28); }
 .drawer {
-  position: fixed; top: 12px; right: 12px; bottom: 12px; width: 384px; max-width: calc(100vw - 24px); z-index: 50;
+  position: fixed; top: 12px; right: 12px; bottom: 12px; width: 460px; max-width: calc(100vw - 24px); z-index: 50;
   background: var(--bg-solid); border: 1px solid var(--border-strong); border-radius: 18px; box-shadow: var(--shadow-pop);
   backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
   display: flex; flex-direction: column; animation: slide-left .24s cubic-bezier(.2, .8, .3, 1);
@@ -230,7 +231,7 @@ html[data-theme="light"] .scrim { background: rgba(31, 41, 72, .28); }
 .drawer-foot { flex: none; padding: 12px 20px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); }
 
 /* 历史 */
-.h-filter { display: flex; gap: 7px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.h-filter { display: flex; flex-wrap: wrap; row-gap: 7px; gap: 7px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
 .h-item { display: flex; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background var(--speed); align-items: flex-start; }
 .h-item:hover { background: var(--bg-elev); }
 .h-item-main { flex: 1; min-width: 0; }
