@@ -171,7 +171,7 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
     // 重试一次，强调只输出 JSON
     const retryMessages = [
       ...messages,
-      { role: "system" as const, content: "上一次输出不是合法 JSON。必须只输出一个 JSON 对象本身，不要有任何其他字符。" },
+      { role: "system" as const, content: "Your previous output was not valid JSON. Output exactly one JSON object and nothing else." },
     ];
     try {
       rawOut = await callChat(retryMessages);
@@ -189,7 +189,7 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
     try {
       const guard = [
         ...messages,
-        { role: "system" as const, content: `输出语言错了：必须与原文一致（${expectLang === "zh" ? "中文" : "英文"}），严禁翻译。请只输出一个 JSON 对象。` },
+        { role: "system" as const, content: `Wrong output language: it must match the source (${expectLang === "zh" ? "Chinese" : "English"}) and must not be a translation. Output exactly one JSON object.` },
       ];
       const out2 = await callChat(guard);
       const p2 = parseModelJson(extractText(out2));

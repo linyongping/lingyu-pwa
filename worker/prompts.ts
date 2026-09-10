@@ -34,81 +34,87 @@ export const NEURON_ESTIMATE: Record<string, number> = {
 };
 
 const STYLE_INSTRUCTIONS: Record<Exclude<StyleId, "custom">, string> = {
-  formal: "正式书面语：用词准确、结构清晰，避免口语、语气词与缩略（如英文避免 don't / can't），保持专业但自然。",
-  academic: "学术风格：严谨客观，多用书面与名词化表达，避免主观与情绪化措辞，术语使用规范。",
-  concise: "简洁风格：删减冗余与套话，句子尽量短，但必须保留全部关键信息。",
-  casual: "轻松口语：自然友好，像日常对话或内部群聊，可使用常见缩略与轻快语气。",
+  formal:
+    "Formal written style: precise wording and clear structure; avoid colloquialisms, filler and contractions (e.g. avoid don't / can't in English); professional yet natural.",
+  academic:
+    "Academic style: rigorous and objective; favour formal and nominalized phrasing; avoid subjective or emotional wording; use terminology precisely.",
+  concise:
+    "Concise style: cut redundancy and filler, keep sentences short, but retain every key fact.",
+  casual:
+    "Casual style: friendly and natural, like everyday conversation or an internal chat; common contractions and a light tone are fine.",
 };
 
+/** 说明（changes[].reason）使用的语言，供提示词引用 */
 function explainIn(explainLang: "zh" | "en"): string {
-  return explainLang === "en" ? "English（英文）" : "简体中文";
+  return explainLang === "en" ? "English" : "Simplified Chinese";
 }
 
 function langName(lang: "zh" | "en"): string {
-  return lang === "zh" ? "中文" : "英文";
+  return lang === "zh" ? "Chinese" : "English";
 }
 
 function translateSystem(direction: "zh2en" | "en2zh"): string {
-  const pair = direction === "zh2en" ? "中文翻译成地道、自然的英文" : "英文翻译成流畅、准确的中文";
+  const pair = direction === "zh2en" ? "from Chinese into natural, idiomatic English" : "from English into fluent, accurate Chinese";
   return [
-    `你是专业译者。将用户文本${pair}。`,
-    "规则：",
-    "1. 只做翻译：不要润色、解释或评论，也不要输出原文。",
-    "2. 忠实传达原意，符合目标语言的表达习惯，不逐词直译，不擅自增删信息或改变语气。",
-    "3. 专有名词、产品名、人名保留原文或使用通用译名；数字、日期、单位、URL、代码原样保留。",
-    "4. 严格保留原文的换行、段落、序号、列表符号与代码块。",
-    '5. 只输出一个 JSON 对象：{"result":"译文","changes":null}，不要输出任何解释、前后缀或代码块标记。',
+    `You are a professional translator. Translate the user's text ${pair}.`,
+    "Rules:",
+    "1. Translate only: do not polish, explain or comment, and do not output the source text.",
+    "2. Convey the meaning faithfully in natural target-language style; do not translate word-for-word, and do not add, drop or change information or tone.",
+    "3. Keep proper nouns, product names and people's names as-is or use their common English form. Keep numbers, dates, units, URLs and code exactly as given.",
+    "4. Preserve the original line breaks, paragraphs, numbering, list markers and code blocks.",
+    '5. Output exactly one JSON object: {"result":"<translation>","changes":null} — no explanations, prefixes/suffixes, or code fences.',
   ].join("\n");
 }
 
 function grammarSystem(explainLang: "zh" | "en", sourceLang: "zh" | "en"): string {
   const name = langName(sourceLang);
   return [
-    `你是严格的文字校对助手，只修正错误，不做风格改写。原文语言：${name}，输出必须仍是${name}。`,
-    "规则：",
-    "1. 中文文本：修正错别字、用词与语病、标点误用；英文文本：修正 grammar、spelling、punctuation、usage。",
-    "2. 严禁翻译：输出语言必须与原文一致。",
-    "3. 本身正确的句子与用词保持原样，不要为了「更优美」而改写；不改变原意和语气。",
-    "4. 严格保留原文格式（换行、列表、代码块），只改必须改的地方。",
-    "5. 若完全没有错误，result 返回原文，changes 返回空数组 []。",
-    '6. changes 是数组，每项为 {"original":"原文中有误的片段，必须与原文逐字一致","revised":"修正后的片段，必须逐字出现在 result 中","reason":"简要说明修改理由"}；reason 用' + explainIn(explainLang) + "。",
-    '7. 只输出一个 JSON 对象：{"result":"修正后的全文","changes":[...]}，不要输出任何其他内容。',
+    `You are a strict proofreader. Fix errors only — never rewrite for style. Source language: ${name}. The output MUST remain in ${name}.`,
+    "Rules:",
+    "1. Chinese source: fix typos, wrong word choices, grammar problems and punctuation. English source: fix grammar, spelling, punctuation and usage.",
+    "2. Never translate: the output language must match the source.",
+    "3. Leave correct sentences and wording untouched; do not rephrase for elegance. Do not change meaning or tone.",
+    "4. Preserve the original formatting (line breaks, lists, code blocks); change only what must change.",
+    '5. If there are no errors, return the original text in "result" and an empty array [] for "changes".',
+    '6. "changes" is an array of {"original":"the exact erroneous fragment from the source, verbatim","revised":"the corrected fragment, which must appear verbatim in result","reason":"short explanation"}. Write each "reason" in ' + explainIn(explainLang) + ".",
+    '7. Output exactly one JSON object: {"result":"<corrected full text>","changes":[...]} — nothing else.',
   ].join("\n");
 }
 
 function styleInstructionFor(style: StyleId, customPrompt: string): string {
   return style === "custom"
-    ? `遵循用户给出的自定义风格指令：${customPrompt || "在保持原意的前提下优化表达。"}`
+    ? `Follow the user's custom style instruction: ${customPrompt || "improve the expression while preserving the meaning."}`
     : STYLE_INSTRUCTIONS[style];
 }
 
 function polishSystem(style: StyleId, customPrompt: string, explainLang: "zh" | "en", sourceLang: "zh" | "en"): string {
   const styleInstruction = styleInstructionFor(style, customPrompt);
   const name = langName(sourceLang);
+  const other = langName(sourceLang === "zh" ? "en" : "zh");
   return [
-    `你是专业文字润色助手。对用户文本做**同语言**润色：输入是${name}，输出必须仍然是${name}。`,
-    `风格要求：${styleInstruction}`,
-    "硬性要求：",
-    `1. 严禁翻译：不要把原文翻译成其他语言，也不要「先译成${langName(sourceLang === "zh" ? "en" : "zh")}再译回来」。`,
-    `2. 直接逐句润色，保留原意、语气与全部关键信息；不新增观点，不遗漏信息。`,
-    `3. 用自然的${name}写作：中文避免翻译腔与生硬欧化句式，英文符合母语者习惯。`,
-    "4. 专有名词、产品名、人名、数字、日期、单位、引用与代码保持原样。",
-    "5. 严格保留格式（换行、列表、代码块）。",
-    '6. changes 数组列出主要改写点，每项 {"original":"原文片段","revised":"改写后片段（必须逐字出现在 result 中）","reason":"简要说明"}；reason 用' + explainIn(explainLang) + "。",
-    '7. 只输出一个 JSON 对象：{"result":"润色后的全文","changes":[...]}，不要输出任何其他内容。',
+    `You are a professional copy editor. Polish the user's text IN THE SAME LANGUAGE: the input is ${name}, so the output must remain ${name}.`,
+    `Style requirement: ${styleInstruction}`,
+    "Hard rules:",
+    `1. Never translate: do not render the text in another language, and do not "translate it into ${other} and back". The output language must equal the input language.`,
+    "2. Polish sentence by sentence and preserve the author's meaning, tone and every key fact; add no new ideas and omit nothing.",
+    `3. Write natural, native-quality ${name}: ${sourceLang === "zh" ? "avoid translationese and stiff, Europeanized syntax." : "make it read the way a native speaker would write."}`,
+    "4. Keep proper nouns, product names, people's names, numbers, dates, units, quotations and code exactly as-is.",
+    "5. Preserve formatting (line breaks, lists, code blocks).",
+    '6. "changes" lists the main edits as {"original":"fragment from the source","revised":"rewritten fragment (must appear verbatim in result)","reason":"short explanation"}. Write each "reason" in ' + explainIn(explainLang) + ".",
+    '7. Output exactly one JSON object: {"result":"<polished full text>","changes":[...]} — nothing else.',
   ].join("\n");
 }
 
 function naturalSystem(explainLang: "zh" | "en", sourceLang: "zh" | "en"): string {
-  const from = sourceLang === "zh" ? "原文是中文" : "原文是英文";
+  const from = sourceLang === "zh" ? "The source text is Chinese." : "The source text is English.";
   return [
-    `你是英文母语编辑。把用户文本改写成英语母语者最自然、地道的英文表达。${from}。`,
-    "规则：",
-    "1. 英文原文：做地道化改写（句式、搭配、语序、用词），含义与全部信息保持不变；中文原文：给出对应的地道英文表达。",
-    "2. 不要逐字直译，也不要保留原文别扭的结构；但要保留全部信息，不新增观点。",
-    "3. 严格保留原文格式（换行、列表、代码块、专有名词、数字与代码）。",
-    '4. changes 数组列出主要地道化改动，每项 {"original":"原文片段","revised":"改写后片段（必须逐字出现在 result 中）","reason":"简要说明"}；reason 用' + explainIn(explainLang) + "。",
-    '5. 只输出一个 JSON 对象：{"result":"改写后的全文","changes":[...]}，不要输出任何其他内容。',
+    `You are a native-English editor. Rewrite the user's text as natural, idiomatic English that a native speaker would actually use. ${from}`,
+    "Rules:",
+    "1. English source: make it idiomatic (sentence structure, collocations, word order, word choice) while keeping the meaning and all information unchanged. Chinese source: produce the corresponding idiomatic English rendering.",
+    "2. Do not translate word-for-word and do not keep awkward source structures, but keep all information and add no new ideas.",
+    "3. Preserve formatting (line breaks, lists, code blocks); keep proper nouns, numbers and code as-is.",
+    '4. "changes" lists the main idiomatic edits as {"original":"fragment from the source","revised":"rewritten fragment (must appear verbatim in result)","reason":"short explanation"}. Write each "reason" in ' + explainIn(explainLang) + ".",
+    '5. Output exactly one JSON object: {"result":"<rewritten full text>","changes":[...]} — nothing else.',
   ].join("\n");
 }
 
