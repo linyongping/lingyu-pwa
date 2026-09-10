@@ -49,7 +49,7 @@ export interface AppError {
 interface ResultProps {
   mode: Mode;
   status: "idle" | "processing" | "done" | "error";
-  result: { result: string; changes: ChangeItem[] | null; direction: "zh2en" | "en2zh" | null; model: string } | null;
+  result: { result: string; changes: ChangeItem[] | null; direction: "zh2en" | "en2zh" | null; model: string; detectedLang?: "zh" | "en" } | null;
   error: AppError | null;
   elapsed: string;
   showChanges: boolean;
@@ -69,6 +69,10 @@ interface ResultProps {
   naturalState: "idle" | "loading" | "done" | "error";
   onNatural: () => void;
   onCopyNatural: () => void;
+  reverse: { intermediate: string; back: string } | null;
+  reverseState: "idle" | "loading" | "done" | "error";
+  onReverse: () => void;
+  onCopyReverse: () => void;
 }
 
 export function ResultPanel(props: ResultProps) {
@@ -212,6 +216,38 @@ export function ResultPanel(props: ResultProps) {
                 {showChanges ? <ChangesList changes={result.changes!} /> : null}
               </div>
             ) : null}
+            {mode === "translate" ? (() => {
+              const srcLang = props.result?.detectedLang === "zh" ? "zh" : "en";
+              const midLang = srcLang === "zh" ? t("settings.uiLang.en") : t("settings.uiLang.zh");
+              const backLang = srcLang === "zh" ? t("settings.uiLang.zh") : t("settings.uiLang.en");
+              return (
+                <div className="changes" style={{ marginTop: 14 }}>
+                  <div className="changes-title">
+                    {t("reverse.title")}
+                    <span className="chip dim" style={{ marginLeft: 8 }}>{t(srcLang === "zh" ? "reverse.path.zh" : "reverse.path.en")}</span>
+                    {props.reverseState === "done" ? (
+                      <button className="btn small" onClick={props.onCopyReverse}><Icon name="copy" size={12} />{t("reverse.copy")}</button>
+                    ) : (
+                      <button className="btn small" onClick={props.onReverse} disabled={props.reverseState === "loading"}>
+                        <Icon name="swap" size={12} />{props.reverseState === "loading" ? t("reverse.loading") : t("reverse.run")}
+                      </button>
+                    )}
+                  </div>
+                  <div className="set-desc" style={{ marginBottom: 8 }}>{t("reverse.desc")}</div>
+                  {props.reverseState === "error" ? (
+                    <div className="copy-fail"><Icon name="alert" size={13} />{t("reverse.error")}</div>
+                  ) : null}
+                  {props.reverseState === "done" && props.reverse ? (
+                    <>
+                      <div className="set-desc" style={{ marginTop: 6 }}>{t("reverse.intermediate", { lang: midLang })}</div>
+                      <div className="result-text">{props.reverse.intermediate}</div>
+                      <div className="set-desc" style={{ marginTop: 8 }}>{t("reverse.final", { lang: backLang })}</div>
+                      <div className="result-text">{props.reverse.back}</div>
+                    </>
+                  ) : null}
+                </div>
+              );
+            })() : null}
           </div>
         ) : null}
       </div>

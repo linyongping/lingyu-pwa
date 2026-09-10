@@ -44,27 +44,35 @@ function explainIn(explainLang: "zh" | "en"): string {
   return explainLang === "en" ? "English（英文）" : "简体中文";
 }
 
+function langName(lang: "zh" | "en"): string {
+  return lang === "zh" ? "中文" : "英文";
+}
+
 function translateSystem(direction: "zh2en" | "en2zh"): string {
   const pair = direction === "zh2en" ? "中文翻译成地道、自然的英文" : "英文翻译成流畅、准确的中文";
   return [
     `你是专业译者。将用户文本${pair}。`,
     "规则：",
-    "1. 忠实传达原意，符合目标语言的表达习惯，不要逐词直译。",
-    "2. 专有名词、产品名、人名保留原文或使用通用译名。",
-    "3. 严格保留原文的换行、段落、序号、列表符号与代码块，不增删信息。",
-    '4. 只输出一个 JSON 对象：{"result":"译文","changes":null}，不要输出任何解释、前后缀或代码块标记。',
+    "1. 只做翻译：不要润色、解释或评论，也不要输出原文。",
+    "2. 忠实传达原意，符合目标语言的表达习惯，不逐词直译，不擅自增删信息或改变语气。",
+    "3. 专有名词、产品名、人名保留原文或使用通用译名；数字、日期、单位、URL、代码原样保留。",
+    "4. 严格保留原文的换行、段落、序号、列表符号与代码块。",
+    '5. 只输出一个 JSON 对象：{"result":"译文","changes":null}，不要输出任何解释、前后缀或代码块标记。',
   ].join("\n");
 }
 
-function grammarSystem(explainLang: "zh" | "en"): string {
+function grammarSystem(explainLang: "zh" | "en", sourceLang: "zh" | "en"): string {
+  const name = langName(sourceLang);
   return [
-    "你是严格的双语文字校对助手。修正用户文本中的拼写、语法、标点与搭配错误，不改变原意和语气。",
+    `你是严格的文字校对助手，只修正错误，不做风格改写。原文语言：${name}，输出必须仍是${name}。`,
     "规则：",
     "1. 中文文本：修正错别字、用词与语病、标点误用；英文文本：修正 grammar、spelling、punctuation、usage。",
-    "2. 严格保留原文格式（换行、列表、代码块），只改必须改的地方。",
-    "3. 若完全没有错误，result 返回原文，changes 返回空数组 []。",
-    '4. changes 是数组，每项为 {"original":"原文中有误的片段，必须与原文逐字一致","revised":"修正后的片段，必须逐字出现在 result 中","reason":"简要说明修改理由"}；reason 用' + explainIn(explainLang) + "。",
-    '5. 只输出一个 JSON 对象：{"result":"修正后的全文","changes":[...]}，不要输出任何其他内容。',
+    "2. 严禁翻译：输出语言必须与原文一致。",
+    "3. 本身正确的句子与用词保持原样，不要为了「更优美」而改写；不改变原意和语气。",
+    "4. 严格保留原文格式（换行、列表、代码块），只改必须改的地方。",
+    "5. 若完全没有错误，result 返回原文，changes 返回空数组 []。",
+    '6. changes 是数组，每项为 {"original":"原文中有误的片段，必须与原文逐字一致","revised":"修正后的片段，必须逐字出现在 result 中","reason":"简要说明修改理由"}；reason 用' + explainIn(explainLang) + "。",
+    '7. 只输出一个 JSON 对象：{"result":"修正后的全文","changes":[...]}，不要输出任何其他内容。',
   ].join("\n");
 }
 
@@ -74,27 +82,33 @@ function styleInstructionFor(style: StyleId, customPrompt: string): string {
     : STYLE_INSTRUCTIONS[style];
 }
 
-function polishSystem(style: StyleId, customPrompt: string, explainLang: "zh" | "en"): string {
+function polishSystem(style: StyleId, customPrompt: string, explainLang: "zh" | "en", sourceLang: "zh" | "en"): string {
   const styleInstruction = styleInstructionFor(style, customPrompt);
+  const name = langName(sourceLang);
   return [
-    "你是专业文字润色助手。在保持语言不变（中文润色后仍是中文、英文润色后仍是英文）的前提下，按指定风格改写用户文本。",
+    `你是专业文字润色助手。对用户文本做**同语言**润色：输入是${name}，输出必须仍然是${name}。`,
     `风格要求：${styleInstruction}`,
-    "规则：",
-    "1. 保留原意与全部关键信息，不新增观点，不遗漏信息。",
-    "2. 严格保留格式（换行、列表、代码块）。",
-    '3. changes 数组列出主要改写点，每项 {"original":"原文片段","revised":"改写后片段（必须逐字出现在 result 中）","reason":"简要说明"}；reason 用' + explainIn(explainLang) + "。",
-    '4. 只输出一个 JSON 对象：{"result":"润色后的全文","changes":[...]}，不要输出任何其他内容。',
+    "硬性要求：",
+    `1. 严禁翻译：不要把原文翻译成其他语言，也不要「先译成${langName(sourceLang === "zh" ? "en" : "zh")}再译回来」。`,
+    `2. 直接逐句润色，保留原意、语气与全部关键信息；不新增观点，不遗漏信息。`,
+    `3. 用自然的${name}写作：中文避免翻译腔与生硬欧化句式，英文符合母语者习惯。`,
+    "4. 专有名词、产品名、人名、数字、日期、单位、引用与代码保持原样。",
+    "5. 严格保留格式（换行、列表、代码块）。",
+    '6. changes 数组列出主要改写点，每项 {"original":"原文片段","revised":"改写后片段（必须逐字出现在 result 中）","reason":"简要说明"}；reason 用' + explainIn(explainLang) + "。",
+    '7. 只输出一个 JSON 对象：{"result":"润色后的全文","changes":[...]}，不要输出任何其他内容。',
   ].join("\n");
 }
 
-function naturalSystem(explainLang: "zh" | "en"): string {
+function naturalSystem(explainLang: "zh" | "en", sourceLang: "zh" | "en"): string {
+  const from = sourceLang === "zh" ? "原文是中文" : "原文是英文";
   return [
-    "你是英文母语编辑。把用户文本用英语母语者最自然、地道的方式表达出来：原文为英文则做地道化改写，原文为中文则给出对应的地道英文表达。",
+    `你是英文母语编辑。把用户文本改写成英语母语者最自然、地道的英文表达。${from}。`,
     "规则：",
-    "1. 含义与全部信息保持不变，只调整句式、搭配、语序、用词，使其像母语者自然的说法；不新增观点，不遗漏信息。",
-    "2. 严格保留原文格式（换行、列表、代码块、专有名词）。",
-    '3. changes 数组列出主要地道化改动，每项 {"original":"原文片段","revised":"改写后片段（必须逐字出现在 result 中）","reason":"简要说明"}；reason 用' + explainIn(explainLang) + "。",
-    '4. 只输出一个 JSON 对象：{"result":"改写后的全文","changes":[...]}，不要输出任何其他内容。',
+    "1. 英文原文：做地道化改写（句式、搭配、语序、用词），含义与全部信息保持不变；中文原文：给出对应的地道英文表达。",
+    "2. 不要逐字直译，也不要保留原文别扭的结构；但要保留全部信息，不新增观点。",
+    "3. 严格保留原文格式（换行、列表、代码块、专有名词、数字与代码）。",
+    '4. changes 数组列出主要地道化改动，每项 {"original":"原文片段","revised":"改写后片段（必须逐字出现在 result 中）","reason":"简要说明"}；reason 用' + explainIn(explainLang) + "。",
+    '5. 只输出一个 JSON 对象：{"result":"改写后的全文","changes":[...]}，不要输出任何其他内容。',
   ].join("\n");
 }
 
@@ -118,13 +132,13 @@ export function buildMessages(
     system = translateSystem(direction as "zh2en" | "en2zh");
     temperature = 0.2;
   } else if (mode === "grammar") {
-    system = grammarSystem(opts.explainLang);
+    system = grammarSystem(opts.explainLang, detectLang(text));
     temperature = 0.1;
   } else if (mode === "natural") {
-    system = naturalSystem(opts.explainLang);
+    system = naturalSystem(opts.explainLang, detectLang(text));
     temperature = 0.5;
   } else {
-    system = polishSystem(opts.style, opts.customPrompt, opts.explainLang);
+    system = polishSystem(opts.style, opts.customPrompt, opts.explainLang, detectLang(text));
     temperature = 0.7;
   }
 

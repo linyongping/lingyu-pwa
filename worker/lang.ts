@@ -1,9 +1,22 @@
 /** 粗粒度中英文检测：CJK 字符占比 > 30% 判定为中文 */
 export function detectLang(text: string): "zh" | "en" {
+  return langInfo(text).lang;
+}
+
+/** 语言判定 + 字符计数，便于判断样本是否足以自信判定 */
+export function langInfo(text: string): { lang: "zh" | "en"; cjk: number; latin: number } {
   const cjk = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) || []).length;
   const latin = (text.match(/[a-zA-Z]/g) || []).length;
-  if (cjk + latin === 0) return "zh";
-  return cjk / (cjk + latin) > 0.3 ? "zh" : "en";
+  if (cjk + latin === 0) return { lang: "zh", cjk, latin };
+  return { lang: cjk / (cjk + latin) > 0.3 ? "zh" : "en", cjk, latin };
+}
+
+/** 两者语言是否明确不一致（任一样本字母/CJK 太少则不判定，避免误伤短文本） */
+export function langMismatch(src: string, out: string): boolean {
+  const a = langInfo(src);
+  const b = langInfo(out);
+  if (a.cjk + a.latin < 8 || b.cjk + b.latin < 8) return false;
+  return a.lang !== b.lang;
 }
 
 /**

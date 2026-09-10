@@ -58,6 +58,9 @@ export default function App() {
   // 语法检查结果上的「更地道表达」：仅手动触发，不写回剪贴板、不进历史
   const [natural, setNatural] = useState<{ text: string; changes: ChangeItem[] | null } | null>(null);
   const [naturalState, setNaturalState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  // 翻译结果上的「反转翻译」：中→英→中（英文源则英→中→英），仅手动触发
+  const [reverse, setReverse] = useState<{ intermediate: string; back: string } | null>(null);
+  const [reverseState, setReverseState] = useState<"idle" | "loading" | "done" | "error">("idle");
 
   const { toasts, pushToast } = useToasts();
 
@@ -216,6 +219,8 @@ export default function App() {
       setStatus("done");
       setNatural(null);
       setNaturalState("idle");
+      setReverse(null);
+      setReverseState("idle");
       runSigRef.current = [modeArg, styleRef.current, directionRef.current, t].join("|");
       lastSourceRef.current = t;
       fromHistoryRef.current = false;
@@ -308,10 +313,45 @@ export default function App() {
     }
   }, [result, source, pushToast, tr]);
 
-  const resetNatural = useCallback(() => {
+  const resetDerived = useCallback(() => {
     setNatural(null);
     setNaturalState("idle");
+    setReverse(null);
+    setReverseState("idle");
   }, []);
+
+  /* ── 反转翻译：中→英→中（英文源则英→中→英），手动触发 ── */
+  const runReverse = useCallback(async () => {
+    const src = (source || result?.result || "").trim();
+    if (!src) return;
+    const first: "zh2en" | "en2zh" = lyDetectLang(src) === "zh" ? "zh2en" : "en2zh";
+    const second: "zh2en" | "en2zh" = first === "zh2en" ? "en2zh" : "zh2en";
+    setReverseState("loading");
+    busyRef.current = true;
+    try {
+      const common = {
+        passcode: passcodeRef.current,
+        mode: "translate" as const,
+        style: styleRef.current,
+        customPrompt: "",
+        explainLang: settingsRef.current.explainLang,
+        model: settingsRef.current.model,
+      };
+      const step1 = await processText({ ...common, text: src, direction: first });
+      const step2 = await processText({ ...common, text: step1.result, direction: second });
+      setReverse({ intermediate: step1.result, back: step2.result });
+      setReverseState("done");
+      setUsage(step2.usage);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "invalid_passcode") {
+        setAuth("locked");
+        pushToast("err", tr("toast.passcodeInvalid"));
+      }
+      setReverseState("error");
+    } finally {
+      busyRef.current = false;
+    }
+  }, [source, result, pushToast, tr]);
 
   /* 模式 / 风格 / 方向变化时按新参数重跑 */
   useEffect(() => {
@@ -617,7 +657,7 @@ export default function App() {
       <div className="app">
         <TopBar
           mode={mode}
-          onMode={(m) => { setMode(m); setShowChanges(false); resetNatural(); }}
+          onMode={(m) => { setMode(m); setShowChanges(false); resetDerived(); }}
           clipState={clipPillState}
           usage={usage}
           currentModel={settings.model}
@@ -643,7 +683,7 @@ export default function App() {
           <SourcePanel
             mode={mode}
             source={source}
-            onSource={(v) => { textParamActiveRef.current = false; userEditRef.current = true; setSource(v); resetNatural(); }}
+            onSource={(v) => { textParamActiveRef.current = false; userEditRef.current = true; setSource(v); resetDerived(); }}
             busy={status === "processing"}
             onRun={() => void runProcess(mode, source)}
             onPaste={async () => {
@@ -655,7 +695,7 @@ export default function App() {
                 pushToast("warn", clip.reason === "denied" ? tr("toast.clipUnreadable") : tr("toast.clipEmpty"));
               }
             }}
-            onClear={() => { setSource(""); setStatus("idle"); setResult(null); setError(null); setCopied(null); resetNatural(); }}
+            onClear={() => { setSource(""); setStatus("idle"); setResult(null); setError(null); setCopied(null); resetDerived(); }}
           />
           <ResultPanel
             mode={mode}
@@ -690,6 +730,10 @@ export default function App() {
             naturalState={naturalState}
             onNatural={() => void runNatural()}
             onCopyNatural={() => natural && void copyNow(natural.text)}
+            reverse={reverse}
+            reverseState={reverseState}
+            onReverse={() => void runReverse()}
+            onCopyReverse={() => reverse && void copyNow(reverse.back)}
           />
         </main>
 
@@ -710,7 +754,7 @@ export default function App() {
             setCopied(null);
             runSigRef.current = [it.mode, styleRef.current, directionRef.current, it.source.trim()].join("|");
             setShowHistory(false);
-            resetNatural();
+            resetDerived();
             pushToast("accent", tr("toast.historyLoaded"));
           }}
           onDelete={(id) => { void deleteHistory(id).then(() => listHistory()).then(setHistory); }}

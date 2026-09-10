@@ -1,6 +1,6 @@
 import { tracing } from "cloudflare:workers";
 import { buildMessages, DEFAULT_MODEL, MODELS, NEURON_ESTIMATE } from "./prompts";
-import { detectLang, parseModelJson, stripToFallbackText } from "./lang";
+import { detectLang, langMismatch, parseModelJson, stripToFallbackText } from "./lang";
 import { incrementUsage, readUsage } from "./usage";
 import type { Env, ProcessBody } from "./types";
 
@@ -149,15 +149,18 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
     });
   }
 
-  let rawOut: unknown = null;
-  try {
-    rawOut = await tracing.enterSpan("chat", async (chatSpan) => {
+  const callChat = (msgs: Array<{ role: string; content: string }>) =>
+    tracing.enterSpan("chat", async (chatSpan) => {
       chatSpan.setAttribute("gen_ai.operation.name", "chat");
       chatSpan.setAttribute("gen_ai.agent.name", "lingyu");
       chatSpan.setAttribute("gen_ai.request.model", modelId);
       chatSpan.setAttribute("gen_ai.request.temperature", temperature);
-      return runModel(env, modelId, messages, temperature);
+      return runModel(env, modelId, msgs, temperature);
     });
+
+  let rawOut: unknown = null;
+  try {
+    rawOut = await callChat(messages);
   } catch (err) {
     return json(502, errorBody("ai_error", `模型调用失败：${err instanceof Error ? err.message : "unknown"}`));
   }
@@ -171,17 +174,33 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
       { role: "system" as const, content: "上一次输出不是合法 JSON。必须只输出一个 JSON 对象本身，不要有任何其他字符。" },
     ];
     try {
-      rawOut = await tracing.enterSpan("chat", async (chatSpan) => {
-        chatSpan.setAttribute("gen_ai.operation.name", "chat");
-        chatSpan.setAttribute("gen_ai.agent.name", "lingyu");
-        chatSpan.setAttribute("gen_ai.request.model", modelId);
-        chatSpan.setAttribute("gen_ai.request.temperature", temperature);
-        return runModel(env, modelId, retryMessages, temperature);
-      });
+      rawOut = await callChat(retryMessages);
       raw = extractText(rawOut);
       parsed = parseModelJson(raw);
     } catch {
       // 保持 parsed 为空，走兜底
+    }
+  }
+
+  // 语言一致性守卫：润色/校对必须与原文同语言。模型若「翻译了」，重试一次；仍不符则退回原文，
+  // 避免把译文当润色结果返回（中文输入被译成英文、或英文被译成中文等）。
+  const expectLang = mode === "polish" || mode === "grammar" ? detectLang(text) : null;
+  if (parsed && expectLang && langMismatch(text, parsed.result)) {
+    try {
+      const guard = [
+        ...messages,
+        { role: "system" as const, content: `输出语言错了：必须与原文一致（${expectLang === "zh" ? "中文" : "英文"}），严禁翻译。请只输出一个 JSON 对象。` },
+      ];
+      const out2 = await callChat(guard);
+      const p2 = parseModelJson(extractText(out2));
+      if (p2) {
+        rawOut = out2; raw = extractText(out2); parsed = p2;
+      }
+    } catch {
+      // 保持原结果，交给下面的兜底判断
+    }
+    if (langMismatch(text, parsed.result)) {
+      parsed = { result: text, changes: null };
     }
   }
 
