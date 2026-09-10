@@ -19,6 +19,20 @@
       "remote": true
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "USAGE_DO",
+        "class_name": "UsageCounter"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["UsageCounter"]
+    }
+  ],
   "vars": {
     "DAILY_REQUEST_LIMIT": "3000"
   },

@@ -40,6 +40,8 @@ export interface HistoryItem {
   result: string;
   changes: ChangeItem[] | null;
   styleLabel: string | null;
+  /** 翻译方向（旧记录可能缺失；用于避免锁定方向时误命中相反方向的缓存） */
+  direction?: "zh2en" | "en2zh" | null;
 }
 
 export const MODE_LABELS: Record<Mode, string> = { translate: "翻译", grammar: "语法检查", polish: "润色" };

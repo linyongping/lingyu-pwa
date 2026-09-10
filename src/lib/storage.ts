@@ -1,4 +1,4 @@
-import type { Settings } from "./types";
+import type { ModelId, Settings } from "./types";
 
 const KEYS = {
   passcode: "ly_passcode",
@@ -47,7 +47,18 @@ export const storage = {
     localStorage.setItem(KEYS.mode, v);
   },
   getSettings(): Settings {
-    return loadJSON<Settings>(KEYS.settings, { autoRead: true, autoCopy: true, model: "qwen3", explainLang: "zh" });
+    const defaults: Settings = { autoRead: true, autoCopy: true, model: "qwen3", explainLang: "zh" };
+    const saved = loadJSON<unknown>(KEYS.settings, null);
+    // localStorage 可能被写坏（"null"、数组、缺字段），逐项校验后再合并，避免 undefined 传播
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return defaults;
+    const s = saved as Record<string, unknown>;
+    const validModels: ModelId[] = ["qwen3", "qwen3_8", "m2m100", "llama32_1b"];
+    return {
+      autoRead: typeof s.autoRead === "boolean" ? s.autoRead : defaults.autoRead,
+      autoCopy: typeof s.autoCopy === "boolean" ? s.autoCopy : defaults.autoCopy,
+      model: validModels.includes(s.model as ModelId) ? (s.model as ModelId) : defaults.model,
+      explainLang: s.explainLang === "en" ? "en" : defaults.explainLang,
+    };
   },
   setSettings(s: Settings) {
     localStorage.setItem(KEYS.settings, JSON.stringify(s));

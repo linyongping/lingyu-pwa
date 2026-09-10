@@ -9,8 +9,8 @@ import type { ThemePref } from "./hooks/useTheme";
 import { useToasts } from "./hooks/useToasts";
 import { ApiError, fetchUsage, processText } from "./lib/api";
 import { detectLang as lyDetectLang, isSkippable, readClipboard, writeClipboard } from "./lib/clipboard";
-import { addHistory, clearHistory, deleteHistory, listHistory } from "./lib/history";
-import { loadCustomPrompts, saveCustomPrompts, getPrompt, type PromptKey } from "./lib/prompts";
+import { addHistory, clearHistory, deleteHistory, historyMatches, listHistory } from "./lib/history";
+import { loadCustomPrompts, saveCustomPrompts, type PromptKey } from "./lib/prompts";
 import { storage } from "./lib/storage";
 import { DEDUPE_WINDOW, MODE_LABELS, STYLES } from "./lib/types";
 import type { Direction, HistoryItem, Mode, ProcessOk, Settings, StyleId, Usage } from "./lib/types";
@@ -68,9 +68,13 @@ export default function App() {
   const pendingWriteRef = useRef<string | null>(null);
   const runSigRef = useRef("");
   const clipWarnedRef = useRef(false);
+  const focusReadRef = useRef(false); // 串行化剪贴板自动读取，避免 focus/visibilitychange 并发重复请求
   const fromHistoryRef = useRef(false);
+  const userEditRef = useRef(false); // 原文框被手动编辑，避免每次输入都触发 API
   const abortRef = useRef<AbortController | null>(null);
   const textParamActiveRef = useRef(false);
+  const customPromptsRef = useRef(customPrompts);
+  customPromptsRef.current = customPrompts;
   const historyRef = useRef(history);
   historyRef.current = history;
   const usageRef = useRef(usage);
@@ -85,19 +89,21 @@ export default function App() {
   /* ── 历史缓存命中 ─────────────────────── */
   const tryLoadFromHistory = async (text: string, mode: Mode): Promise<ProcessOk | null> => {
     const t = text.trim();
+    const matchNow = (items: HistoryItem[]) =>
+      items.find((item) => historyMatches(item, t, mode, styleRef.current, directionRef.current));
     // 先查内存 ref（快速路径）
-    let match = historyRef.current.find((item) => item.source === t && item.mode === mode);
+    let match = matchNow(historyRef.current);
     // ref 为空时（页面刚重新加载、IndexedDB 还没加载完）做一次异步兜底
     if (!match) {
       const fresh = await listHistory();
-      match = fresh.find((item) => item.source === t && item.mode === mode);
+      match = matchNow(fresh);
     }
     if (!match) return null;
     return {
       result: match.result,
       changes: match.changes,
       detectedLang: lyDetectLang(t),
-      direction: null,
+      direction: match.direction ?? null,
       model: settingsRef.current.model,
       neuronEstimate: 0,
       usage: usageRef.current ?? { used: 0, limit: 3000, date: "" },
@@ -121,7 +127,7 @@ export default function App() {
   }, []);
 
   /* ── 核心处理 ───────────────────────── */
-  const runProcess = useCallback(async (modeArg: Mode, textArg: string, opts?: { auto?: boolean }) => {
+  const runProcess = useCallback(async (modeArg: Mode, textArg: string) => {
     const t = textArg.trim();
     if (!t) { pushToast("warn", "没有可处理的内容"); return; }
     if (t.length > 4000) {
@@ -137,7 +143,7 @@ export default function App() {
     abortRef.current = controller;
     const timeoutId = setTimeout(() => controller.abort(), 15000);
     const started = performance.now();
-
+    busyRef.current = true;
     try {
       const resp = await processText({
         passcode: passcodeRef.current,
@@ -146,17 +152,18 @@ export default function App() {
         direction: directionRef.current,
         style: styleRef.current,
         customPrompt: styleRef.current === "custom" ? customStyle : "",
+        // 仅当用户自定义过提示词时才下发覆盖；否则交给 worker 生成默认提示词，
+        // 这样润色的风格指令/说明语言才会按选择生效（默认润色提示词含占位符）
         systemPrompt: (() => {
+          const custom = customPromptsRef.current;
           if (modeArg === "translate") {
             const dir = directionRef.current === "zh2en" || directionRef.current === "en2zh"
               ? directionRef.current
               : lyDetectLang(t) === "zh" ? "zh2en" : "en2zh";
-            return dir === "zh2en"
-              ? getPrompt("translate_zh2en", customPrompts)
-              : getPrompt("translate_en2zh", customPrompts);
+            return custom[dir === "zh2en" ? "translate_zh2en" : "translate_en2zh"];
           }
-          if (modeArg === "grammar") return getPrompt("grammar", customPrompts);
-          return getPrompt("polish", customPrompts);
+          if (modeArg === "grammar") return custom.grammar;
+          return custom.polish;
         })(),
         explainLang: settingsRef.current.explainLang,
         model: settingsRef.current.model,
@@ -169,7 +176,8 @@ export default function App() {
       runSigRef.current = [modeArg, styleRef.current, directionRef.current, t].join("|");
       lastSourceRef.current = t;
       fromHistoryRef.current = false;
-      if (opts?.auto) lastAutoRef.current = { text: t, mode: modeArg, at: Date.now(), result: resp.result };
+      // 所有成功请求都记录，避免手动处理的结果写回剪贴板后，下次聚焦又被当成新内容处理（乒乓）
+      lastAutoRef.current = { text: t, mode: modeArg, at: Date.now(), result: resp.result };
       void addHistory({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         time: Date.now(),
@@ -178,12 +186,13 @@ export default function App() {
         result: resp.result,
         changes: resp.changes,
         styleLabel: modeArg === "polish" ? STYLES.find((s) => s.id === styleRef.current)?.label ?? null : null,
+        direction: resp.direction,
       }).then(() => listHistory()).then(setHistory);
       deliverResult(resp);
     } catch (e: any) {
-      busyRef.current = false;
-      // 被新请求 abort 的旧请求不显示错误
-      if (e?.name === "AbortError" && abortRef.current !== controller) return;
+      // 已被更新的请求取代（processText 会把 AbortError 包成 ApiError）：
+      // 静默退出，避免旧请求的「超时」错误覆盖新请求的状态
+      if (abortRef.current !== controller) return;
       if (e instanceof ApiError) {
         if (e.code === "invalid_passcode") {
           setAuth("locked");
@@ -193,6 +202,9 @@ export default function App() {
           setStatus("error");
         } else if (e.code === "quota_exceeded") {
           setError({ title: "今日 AI 请求额度已用尽", desc: "Workers AI 免费额度明日自动恢复；也可在设置中切换轻量模型降低消耗。" });
+          setStatus("error");
+        } else if (e.code === "timeout") {
+          setError({ title: "处理超时", desc: e.message });
           setStatus("error");
         } else {
           setError({ title: "处理失败", desc: e.message });
@@ -205,27 +217,30 @@ export default function App() {
       return;
     } finally {
       clearTimeout(timeoutId);
-      busyRef.current = false;
+      // 只有当前请求仍是最新请求时才清 busy，避免旧请求清掉新请求的忙状态
+      if (abortRef.current === controller) busyRef.current = false;
     }
   }, [customStyle, deliverResult, pushToast]);
 
   /* 模式 / 风格 / 方向变化时按新参数重跑 */
   useEffect(() => {
     if (auth !== "ok" || busyRef.current || status !== "done" || !source.trim()) return;
+    // 原文框被手动编辑：只更新界面，不自动调用 API（否则每次输入都会发请求）
+    if (userEditRef.current) { userEditRef.current = false; return; }
     const sig = [mode, style, direction, source.trim()].join("|");
     if (sig === runSigRef.current) return;
     // 同步快速路径：historyRef 已填充时直接命中，无需 await
     const t = source.trim();
-    const quickMatch = historyRef.current.find((item) => item.source === t && item.mode === mode);
+    const quickMatch = historyRef.current.find((item) => historyMatches(item, t, mode, style, direction));
     if (quickMatch) {
       setResult({
         result: quickMatch.result, changes: quickMatch.changes, detectedLang: lyDetectLang(t),
-        direction: null, model: settingsRef.current.model, neuronEstimate: 0,
+        direction: quickMatch.direction ?? null, model: settingsRef.current.model, neuronEstimate: 0,
         usage: usageRef.current ?? { used: 0, limit: 3000, date: "" },
       });
       setStatus("done"); setError(null); setCopied(null);
       runSigRef.current = sig; fromHistoryRef.current = true;
-      pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source, {}); } });
+      pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source); } });
       return;
     }
     // 异步兜底：ref 为空时（页面刚重新加载、IndexedDB 还没加载完）
@@ -234,68 +249,74 @@ export default function App() {
       if (cached) {
         setResult(cached); setStatus("done"); setError(null); setCopied(null);
         runSigRef.current = sig; fromHistoryRef.current = true;
-        pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source, {}); } });
+        pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source); } });
         return;
       }
-      void runProcess(mode, source, {});
+      void runProcess(mode, source);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, style, direction, source, status, auth]);
+  }, [mode, style, direction, source, status, auth, customStyle]);
 
   /* ── 剪贴板自动读取 ──────────────────── */
   const simulateFocusRead = useCallback(async () => {
     if (authRef.current !== "ok" || busyRef.current) return;
-    if (textParamActiveRef.current) return; // URL 参数文本模式，暂停剪贴板读取
-    if (!settingsRef.current.autoRead) {
-      if (!clipWarnedRef.current) pushToast("warn", "自动读取已关闭（设置中可开启）");
-      clipWarnedRef.current = true;
-      return;
-    }
-    const clip = await readClipboard();
-    if (!clip.ok) {
-      if (clip.reason === "denied") {
-        setClipState("denied");
-        if (!clipWarnedRef.current) pushToast("warn", "未获得剪贴板权限——请在浏览器地址栏授权后重试");
-      } else if (clip.reason === "unsupported") {
-        setClipState("denied");
-        if (!clipWarnedRef.current) pushToast("warn", "此浏览器不支持自动读取，请直接 ⌘V 粘贴");
-      } else {
-        setClipState("on");
+    if (focusReadRef.current) return; // focus 与 visibilitychange 会同时触发，串行化避免重复请求
+    focusReadRef.current = true;
+    try {
+      if (textParamActiveRef.current) return; // URL 参数文本模式，暂停剪贴板读取
+      if (!settingsRef.current.autoRead) {
+        if (!clipWarnedRef.current) pushToast("warn", "自动读取已关闭（设置中可开启）");
+        clipWarnedRef.current = true;
+        return;
       }
-      clipWarnedRef.current = true;
-      return;
+      const clip = await readClipboard();
+      if (!clip.ok) {
+        if (clip.reason === "denied") {
+          setClipState("denied");
+          if (!clipWarnedRef.current) pushToast("warn", "未获得剪贴板权限——请在浏览器地址栏授权后重试");
+        } else if (clip.reason === "unsupported") {
+          setClipState("denied");
+          if (!clipWarnedRef.current) pushToast("warn", "此浏览器不支持自动读取，请直接 ⌘V 粘贴");
+        } else {
+          setClipState("on");
+        }
+        clipWarnedRef.current = true;
+        return;
+      }
+      clipWarnedRef.current = false;
+      setClipState("on");
+      const text = clip.value;
+      if (isSkippable(text)) {
+        pushToast("warn", "剪贴板是链接或内容过短，已跳过自动处理");
+        return;
+      }
+      const la = lastAutoRef.current;
+      // 防重：剪贴板是上次处理的原文「或其结果」都跳过（不限模式，彻底杜绝乒乓）
+      if ((text === la.text || (la.result && text === la.result)) && Date.now() - la.at < DEDUPE_WINDOW) {
+        pushToast("accent", "与上次处理内容相同（或为其结果），已跳过防重复", {
+          label: "强制重跑",
+          onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, text); },
+        });
+        return;
+      }
+      setSource(text);
+      // 历史缓存命中：相同文本+相同模式直接用缓存结果，跳过 API 调用
+      const cached = await tryLoadFromHistory(text, modeRef.current);
+      if (cached) {
+        setResult(cached);
+        setStatus("done");
+        setError(null);
+        setCopied(null);
+        runSigRef.current = [modeRef.current, styleRef.current, directionRef.current, text].join("|");
+        lastAutoRef.current = { text, mode: modeRef.current, at: Date.now(), result: cached.result };
+        fromHistoryRef.current = true;
+        pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source); } });
+        return;
+      }
+      void runProcess(modeRef.current, text);
+    } finally {
+      focusReadRef.current = false;
     }
-    clipWarnedRef.current = false;
-    setClipState("on");
-    const text = clip.value;
-    if (isSkippable(text)) {
-      pushToast("warn", "剪贴板是链接或内容过短，已跳过自动处理");
-      return;
-    }
-    const la = lastAutoRef.current;
-    // 防重：剪贴板是上次处理的原文「或其结果」都跳过（不限模式，彻底杜绝乒乓）
-    if ((text === la.text || (la.result && text === la.result)) && Date.now() - la.at < DEDUPE_WINDOW) {
-      pushToast("accent", "与上次处理内容相同（或为其结果），已跳过防重复", {
-        label: "强制重跑",
-        onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, text, {}); },
-      });
-      return;
-    }
-    setSource(text);
-    // 历史缓存命中：相同文本+相同模式直接用缓存结果，跳过 API 调用
-    const cached = await tryLoadFromHistory(text, modeRef.current);
-    if (cached) {
-      setResult(cached);
-      setStatus("done");
-      setError(null);
-      setCopied(null);
-      runSigRef.current = [modeRef.current, styleRef.current, directionRef.current, text].join("|");
-      lastAutoRef.current = { text, mode: modeRef.current, at: Date.now(), result: cached.result };
-      fromHistoryRef.current = true;
-      pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source, {}); } });
-      return;
-    }
-    void runProcess(modeRef.current, text, { auto: true });
   }, [pushToast, runProcess]);
 
   /* 窗口激活：先补写未落地的结果，再自动读取 */
@@ -340,8 +361,9 @@ export default function App() {
   useEffect(() => {
     const onPaste = async (e: ClipboardEvent) => {
       if (authRef.current !== "ok") return;
-      const target = e.target as HTMLElement | null;
-      if (target && target.closest("[data-plain-input]")) return;
+      // e.target 可能是 document（无 closest 方法），必须先确认是 Element
+      const target = e.target;
+      if (target instanceof Element && target.closest("[data-plain-input]")) return;
       const text = e.clipboardData?.getData("text/plain") ?? "";
       if (!text.trim()) return;
       e.preventDefault();
@@ -356,10 +378,10 @@ export default function App() {
         setResult(cached); setStatus("done"); setError(null); setCopied(null);
         runSigRef.current = [modeRef.current, styleRef.current, directionRef.current, text.trim()].join("|");
         fromHistoryRef.current = true;
-        pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source, {}); } });
+        pushToast("accent", "命中历史记录，已跳过 API 调用", { label: "重新处理", onClick: () => { fromHistoryRef.current = false; void runProcess(modeRef.current, source); } });
         return;
       }
-      void runProcess(modeRef.current, text.trim(), { auto: true });
+      void runProcess(modeRef.current, text.trim());
     };
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
@@ -430,7 +452,7 @@ export default function App() {
       const m = paramMode && ["translate", "grammar", "polish"].includes(paramMode)
         ? (paramMode as Mode) : modeRef.current;
       pushToast("accent", "URL 参数文本已载入，剪贴板监控暂停");
-      setTimeout(() => void runProcess(m, paramText.trim(), { auto: true }), 100);
+      setTimeout(() => void runProcess(m, paramText.trim()), 100);
       // 清除 URL 参数（避免刷新重复处理）
       window.history.replaceState({}, "", window.location.pathname);
       return;
@@ -454,7 +476,7 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && authRef.current === "ok" && !busyRef.current) {
         e.preventDefault();
-        void runProcess(modeRef.current, source, {});
+        void runProcess(modeRef.current, source);
       }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "c" && result) {
         e.preventDefault();
@@ -522,9 +544,9 @@ export default function App() {
           <SourcePanel
             mode={mode}
             source={source}
-            onSource={(v) => { textParamActiveRef.current = false; setSource(v); }}
+            onSource={(v) => { textParamActiveRef.current = false; userEditRef.current = true; setSource(v); }}
             busy={status === "processing"}
-            onRun={() => void runProcess(mode, source, {})}
+            onRun={() => void runProcess(mode, source)}
             onPaste={async () => {
               const clip = await readClipboard();
               if (clip.ok) {
@@ -564,7 +586,7 @@ export default function App() {
             onEditCustom={() => setShowCustom(true)}
             modelLabel={modelLabel(settings.model)}
             fromHistory={fromHistoryRef.current}
-            onRerun={() => { fromHistoryRef.current = false; void runProcess(mode, source, {}); }}
+            onRerun={() => { fromHistoryRef.current = false; void runProcess(mode, source); }}
           />
         </main>
 
@@ -577,7 +599,9 @@ export default function App() {
           onLoad={(it) => {
             setMode(it.mode);
             setSource(it.source);
-            setResult({ result: it.result, changes: it.changes, detectedLang: "zh", direction: null, model: settings.model, neuronEstimate: 0, usage: usage ?? { used: 0, limit: 0, date: "" } });
+            userEditRef.current = false;
+            fromHistoryRef.current = true;
+            setResult({ result: it.result, changes: it.changes, detectedLang: "zh", direction: it.direction ?? null, model: settings.model, neuronEstimate: 0, usage: usage ?? { used: 0, limit: 0, date: "" } });
             setStatus("done");
             setError(null);
             setCopied(null);

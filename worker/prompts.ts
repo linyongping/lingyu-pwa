@@ -59,11 +59,14 @@ function grammarSystem(explainLang: "zh" | "en"): string {
   ].join("\n");
 }
 
+function styleInstructionFor(style: StyleId, customPrompt: string): string {
+  return style === "custom"
+    ? `遵循用户给出的自定义风格指令：${customPrompt || "在保持原意的前提下优化表达。"}`
+    : STYLE_INSTRUCTIONS[style];
+}
+
 function polishSystem(style: StyleId, customPrompt: string, explainLang: "zh" | "en"): string {
-  const styleInstruction =
-    style === "custom"
-      ? `遵循用户给出的自定义风格指令：${customPrompt || "在保持原意的前提下优化表达。"}`
-      : STYLE_INSTRUCTIONS[style];
+  const styleInstruction = styleInstructionFor(style, customPrompt);
   return [
     "你是专业文字润色助手。在保持语言不变（中文润色后仍是中文、英文润色后仍是英文）的前提下，按指定风格改写用户文本。",
     `风格要求：${styleInstruction}`,
@@ -104,7 +107,8 @@ export function buildMessages(
 
   // 用户自定义提示词优先（前端设置页编辑，存 localStorage，请求时带上）
   if (systemPromptOverride) {
-    system = systemPromptOverride;
+    // 自定义润色提示词若保留占位符，仍按当前风格替换，避免把 {style_instruction} 原样发给模型
+    system = systemPromptOverride.replace(/\{style_instruction\}/g, styleInstructionFor(opts.style, opts.customPrompt));
   }
 
   return {

@@ -1,4 +1,21 @@
-import type { HistoryItem } from "./types";
+import { STYLES } from "./types";
+import type { Direction, HistoryItem, Mode, StyleId } from "./types";
+
+/**
+ * 判断历史记录能否作为当前请求的缓存命中：
+ * 原文 + 模式一致；润色还要求风格一致；翻译锁定方向时不得命中相反方向/无方向信息的旧记录。
+ */
+export function historyMatches(item: HistoryItem, text: string, mode: Mode, style: StyleId, direction: Direction): boolean {
+  if (item.source !== text || item.mode !== mode) return false;
+  if (mode === "polish") {
+    const label = STYLES.find((s) => s.id === style)?.label ?? null;
+    if (item.styleLabel !== label) return false;
+  }
+  if (mode === "translate" && (direction === "zh2en" || direction === "en2zh")) {
+    if (item.direction !== direction) return false;
+  }
+  return true;
+}
 
 const DB_NAME = "lingyu";
 const STORE = "history";
@@ -37,14 +54,19 @@ async function withStore<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore
   });
 }
 
-/** 全量历史，新→旧，最多 CAP 条；IndexedDB 不可用时降级为空 */
-export async function listHistory(): Promise<HistoryItem[]> {
+/** 全量历史，新→旧，不截断；IndexedDB 不可用时降级为空 */
+async function listHistoryRaw(): Promise<HistoryItem[]> {
   try {
     const all = (await withStore<HistoryItem[]>("readonly", (store) => store.getAll())) ?? [];
-    return all.sort((a, b) => b.time - a.time).slice(0, CAP);
+    return all.sort((a, b) => b.time - a.time);
   } catch {
     return [];
   }
+}
+
+/** 全量历史，新→旧，最多 CAP 条；IndexedDB 不可用时降级为空 */
+export async function listHistory(): Promise<HistoryItem[]> {
+  return (await listHistoryRaw()).slice(0, CAP);
 }
 
 export async function addHistory(item: HistoryItem): Promise<void> {
@@ -53,8 +75,8 @@ export async function addHistory(item: HistoryItem): Promise<void> {
       store.put(item);
       void store; // put 事务自身完成即可
     });
-    // 清理超出容量的旧记录
-    const all = await listHistory();
+    // 清理超出容量的旧记录（必须取截断前的全量，否则 slice(CAP) 永远为空）
+    const all = await listHistoryRaw();
     const stale = all.slice(CAP);
     if (stale.length) {
       await withStore("readwrite", (store) => {

@@ -54,7 +54,15 @@ const STORAGE_KEY = "ly_custom_prompts";
 
 export function loadCustomPrompts(): Partial<Record<PromptKey, string>> {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as unknown;
+    // 存储可能被写坏（"null"/数组/非对象），此时降级为「无自定义」
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out: Partial<Record<PromptKey, string>> = {};
+    for (const key of Object.keys(DEFAULT_PROMPTS) as PromptKey[]) {
+      const value = (raw as Record<string, unknown>)[key];
+      if (typeof value === "string") out[key] = value;
+    }
+    return out;
   } catch {
     return {};
   }

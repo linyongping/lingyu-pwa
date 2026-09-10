@@ -1,7 +1,11 @@
 import { tracing } from "cloudflare:workers";
 import { buildMessages, DEFAULT_MODEL, MODELS, NEURON_ESTIMATE } from "./prompts";
 import { detectLang, parseModelJson, stripToFallbackText } from "./lang";
+import { incrementUsage, readUsage } from "./usage";
 import type { Env, ProcessBody } from "./types";
+
+// Durable Object 必须从入口模块具名导出，wrangler 才能注册
+export { UsageCounter } from "./usage";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" } as const;
 const MAX_CHARS = 4000;
@@ -28,27 +32,6 @@ function passcodeOk(request: Request, env: Env): boolean {
   return diff === 0 && secret.length > 0;
 }
 
-function todayKey(): { key: string; date: string } {
-  const date = new Date().toISOString().slice(0, 10);
-  return { key: `usage:${date}`, date };
-}
-
-async function readUsage(env: Env): Promise<{ used: number; limit: number; date: string }> {
-  const { key, date } = todayKey();
-  const raw = await env.USAGE_KV.get(key);
-  const used = raw ? parseInt(raw, 10) || 0 : 0;
-  const limit = parseInt(env.DAILY_REQUEST_LIMIT ?? "3000", 10) || 3000;
-  return { used, limit, date };
-}
-
-async function incrementUsage(env: Env): Promise<{ used: number; limit: number; date: string }> {
-  const current = await readUsage(env);
-  const { key } = todayKey();
-  const used = current.used + 1;
-  await env.USAGE_KV.put(key, String(used), { expirationTtl: 172800 });
-  return { ...current, used };
-}
-
 function extractText(raw: unknown): string {
   if (typeof raw === "string") return raw;
   if (raw && typeof raw === "object") {
@@ -56,6 +39,7 @@ function extractText(raw: unknown): string {
     if (typeof obj.response === "string") return obj.response;
     if (typeof obj.result === "string") return obj.result;
     if (typeof obj.output_text === "string") return obj.output_text;
+    if (typeof obj.translated_text === "string") return obj.translated_text;
     if (Array.isArray(obj.choices)) {
       const first = obj.choices[0] as Record<string, unknown> | undefined;
       if (first && typeof first === "object") {
@@ -99,7 +83,9 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
     return json(422, errorBody("too_long", `文本超过 ${MAX_CHARS} 字符上限（当前 ${text.length}）`));
   }
 
-  const modelKey = typeof body.model === "string" && body.model in MODELS ? body.model : DEFAULT_MODEL;
+  const requestedKey = typeof body.model === "string" && body.model in MODELS ? body.model : DEFAULT_MODEL;
+  // m2m100 只支持翻译接口（{text, source_lang, target_lang}）；非翻译模式退回默认 chat 模型，避免必然失败
+  const modelKey = requestedKey === "m2m100" && mode !== "translate" ? DEFAULT_MODEL : requestedKey;
   const modelId = MODELS[modelKey];
   const explainLang = body.explainLang === "en" ? "en" : "zh";
   const style = (["formal", "academic", "concise", "casual", "custom"] as const).includes(body.style as never)
@@ -115,6 +101,39 @@ async function handleProcess(request: Request, env: Env): Promise<Response> {
     customPrompt,
     explainLang,
   }, systemPromptOverride);
+
+  // m2m100：翻译专用 seq2seq 模型，走 {text, source_lang, target_lang} 接口，直接返回译文
+  if (modelKey === "m2m100") {
+    let translated = "";
+    try {
+      const out = await tracing.enterSpan("chat", async (chatSpan) => {
+        chatSpan.setAttribute("gen_ai.operation.name", "chat");
+        chatSpan.setAttribute("gen_ai.agent.name", "lingyu");
+        chatSpan.setAttribute("gen_ai.request.model", modelId);
+        return env.AI.run(modelId, {
+          text,
+          source_lang: direction === "zh2en" ? "zh" : "en",
+          target_lang: direction === "zh2en" ? "en" : "zh",
+        });
+      });
+      translated = extractText(out).trim();
+    } catch (err) {
+      return json(502, errorBody("ai_error", `模型调用失败：${err instanceof Error ? err.message : "unknown"}`));
+    }
+    if (!translated) {
+      return json(502, { error: { code: "bad_output", message: "模型没有返回可用内容" } });
+    }
+    const usage = await incrementUsage(env);
+    return json(200, {
+      result: translated,
+      changes: null,
+      detectedLang: detectLang(text),
+      direction,
+      model: "m2m100",
+      neuronEstimate: NEURON_ESTIMATE.m2m100 ?? 2,
+      usage,
+    });
+  }
 
   let rawOut: unknown = null;
   try {
