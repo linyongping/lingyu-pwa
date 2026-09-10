@@ -23,6 +23,23 @@
 
 > 注：`@cf/zai-org/glm-5.3-flash`、旧 Qwen2.5 与 Llama-3.1 已不可用 / 已弃用（2026-09 实测 GLM-5.3-Flash 报 5035 仅付费可用）。
 
+## URL 参数
+
+| 参数 | 取值 | 说明 |
+|---|---|---|
+| `mode` | `translate` / `grammar` / `polish` | 指定本次使用的功能模式 |
+| `text` | 任意文本（URL 编码） | **最高优先级**：直接处理该文本，暂停剪贴板监控；处理完自动清除参数 |
+
+示例：
+
+```
+https://lingyu.haigr.workers.dev/?mode=grammar&text=Me%20and%20my%20colleague%20was%20reviewing
+https://lingyu.haigr.workers.dev/?mode=polish
+```
+
+配合浏览器书签或快捷指令（iOS Shortcuts / Raycast / Alfred）可做成一键翻译/检查入口。
+手动编辑原文框会恢复剪贴板监控。
+
 ## 开发
 
 ```bash

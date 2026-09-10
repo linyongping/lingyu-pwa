@@ -36,7 +36,17 @@ async function getJSON<T>(resp: Response): Promise<T> {
 }
 
 export async function fetchUsage(passcode: string): Promise<Usage> {
-  return getJSON<Usage>(await fetch("/api/usage", { headers: headers(passcode) }));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const resp = await fetch("/api/usage", { headers: headers(passcode), signal: controller.signal });
+    return await getJSON<Usage>(resp);
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    throw new ApiError("network", "网络错误或无响应", 0);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export interface ProcessParams {
