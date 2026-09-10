@@ -2,6 +2,7 @@ node_modules
 dist
 .dev.vars
 .wrangler
+public/version.json
 *.local
 .DS_Store
 node_modules/

@@ -12,6 +12,7 @@ import { detectLang as lyDetectLang, isSkippable, readClipboard, writeClipboard 
 import { addHistory, clearHistory, deleteHistory, historyMatches, listHistory } from "./lib/history";
 import { loadCustomPrompts, saveCustomPrompts, type PromptKey } from "./lib/prompts";
 import { storage } from "./lib/storage";
+import { APP_BUILD_ID, APP_BUILT_AT, activateUpdate, fetchDeployedBuild, formatBuiltAt } from "./lib/version";
 import { DEDUPE_WINDOW, MODE_LABELS, STYLES } from "./lib/types";
 import type { Direction, HistoryItem, Mode, ProcessOk, Settings, StyleId, Usage } from "./lib/types";
 
@@ -52,6 +53,7 @@ export default function App() {
 
   const [usage, setUsage] = useState<Usage | null>(null);
   const [clipState, setClipState] = useState<"on" | "denied" | "off">("on");
+  const [outdated, setOutdated] = useState(false);
 
   const { toasts, pushToast } = useToasts();
 
@@ -85,6 +87,27 @@ export default function App() {
   useEffect(() => { storage.setTheme(themePref); }, [themePref]);
   useEffect(() => { storage.setCustomStyle(customStyle); }, [customStyle]);
   useEffect(() => { saveCustomPrompts(customPrompts); }, [customPrompts]);
+
+  /* ── 版本检查：当前构建标识 vs 线上 /version.json ───────── */
+  const lastVersionCheckRef = useRef(0);
+  const checkVersion = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastVersionCheckRef.current < 60_000) return;
+    lastVersionCheckRef.current = now;
+    const remote = await fetchDeployedBuild();
+    if (remote?.id) setOutdated(remote.id !== APP_BUILD_ID);
+  }, []);
+
+  useEffect(() => {
+    void checkVersion();
+    const onVisible = () => { if (document.visibilityState === "visible") void checkVersion(); };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [checkVersion]);
 
   /* ── 历史缓存命中 ─────────────────────── */
   const tryLoadFromHistory = async (text: string, mode: Mode): Promise<ProcessOk | null> => {
@@ -497,7 +520,7 @@ export default function App() {
         <div className="bg-glow glow-a" />
         <div className="bg-glow glow-b" />
         {auth === "locked" ? (
-          <LockScreen passcode={passcodeInput} onPasscode={setPasscodeInput} onUnlock={() => void unlock()} shake={lockShake} />
+          <LockScreen passcode={passcodeInput} onPasscode={setPasscodeInput} onUnlock={() => void unlock()} shake={lockShake} buildId={APP_BUILD_ID} />
         ) : (
           <div className="lock-screen"><div className="lock-sub">正在验证口令…</div></div>
         )}
@@ -538,6 +561,13 @@ export default function App() {
         <div className={"status-strip " + stripTone}>
           <span>{stripText}</span>
           <span className="status-hint">⌘⏎ 运行 · ⌘⇧C 复制结果</span>
+          <button
+            className={"chip clickable ver-chip" + (outdated ? " accent" : " dim")}
+            title={outdated
+              ? `当前 ${APP_BUILD_ID}，线上已有新版本 · 点击刷新`
+              : `当前版本 ${APP_BUILD_ID}${APP_BUILT_AT ? ` · 构建于 ${formatBuiltAt(APP_BUILT_AT)}` : ""} · 点击检查更新`}
+            onClick={() => { if (outdated) void activateUpdate(); else void checkVersion(true); }}
+          >{outdated ? "有新版本 · 刷新" : APP_BUILD_ID}</button>
         </div>
 
         <main className="workbench">
@@ -621,6 +651,11 @@ export default function App() {
           themePref={themePref}
           onTheme={setThemePref}
           onOpenPrompts={() => setShowPrompts(true)}
+          buildId={APP_BUILD_ID}
+          builtAtLabel={formatBuiltAt(APP_BUILT_AT)}
+          outdated={outdated}
+          onCheckUpdate={() => void checkVersion(true)}
+          onActivateUpdate={() => void activateUpdate()}
         />
 
         {showOnboard ? <OnboardingModal onDone={finishOnboard} /> : null}

@@ -76,7 +76,7 @@ export function HistoryDrawer({ open, items, filter, onFilter, onClose, onLoad, 
 }
 
 /* ── 设置 ─────────────────────────────── */
-export function SettingsDrawer({ open, settings, onSet, onClose, themePref, onTheme, onOpenPrompts }: {
+export function SettingsDrawer({ open, settings, onSet, onClose, themePref, onTheme, onOpenPrompts, buildId, builtAtLabel, outdated, onCheckUpdate, onActivateUpdate }: {
   open: boolean;
   settings: Settings;
   onSet: (patch: Partial<Settings>) => void;
@@ -84,6 +84,11 @@ export function SettingsDrawer({ open, settings, onSet, onClose, themePref, onTh
   themePref: ThemePref;
   onTheme: (t: ThemePref) => void;
   onOpenPrompts: () => void;
+  buildId: string;
+  builtAtLabel: string;
+  outdated: boolean;
+  onCheckUpdate: () => void;
+  onActivateUpdate: () => void;
 }) {
   return (
     <Drawer open={open} title="设置" onClose={onClose} foot="访问口令已保存至本机 · 结果与历史不离开你的设备">
@@ -155,16 +160,30 @@ export function SettingsDrawer({ open, settings, onSet, onClose, themePref, onTh
         </div>
         <button className="btn small" onClick={onOpenPrompts}><Icon name="wand" size={13} />编辑</button>
       </div>
+      <div className="set-row">
+        <div>
+          <div className="set-label">当前版本{outdated ? <span style={{ color: "var(--accent)", marginLeft: 6 }}>· 有新版本</span> : null}</div>
+          <div className="set-desc" style={{ fontFamily: "var(--font-mono)", fontSize: 11.5 }}>
+            {buildId}{builtAtLabel ? ` · 构建于 ${builtAtLabel}` : ""}
+          </div>
+        </div>
+        {outdated ? (
+          <button className="btn accent small" onClick={onActivateUpdate}>刷新到最新</button>
+        ) : (
+          <button className="btn small" onClick={onCheckUpdate}>检查更新</button>
+        )}
+      </div>
     </Drawer>
   );
 }
 
 /* ── 锁屏 ─────────────────────────────── */
-export function LockScreen({ passcode, onPasscode, onUnlock, shake }: {
+export function LockScreen({ passcode, onPasscode, onUnlock, shake, buildId }: {
   passcode: string;
   onPasscode: (v: string) => void;
   onUnlock: () => void;
   shake: boolean;
+  buildId?: string;
 }) {
   return (
     <div className="lock-screen">
@@ -187,6 +206,7 @@ export function LockScreen({ passcode, onPasscode, onUnlock, shake }: {
         <div className="lock-err">{shake ? "口令错误，请重试" : ""}</div>
         <button className="btn accent lock-btn" onClick={onUnlock}><Icon name="lock" size={15} />解锁工作台</button>
         <div className="lock-hint">口令保存在本机，向应用所有者获取</div>
+        {buildId ? <div className="lock-version">{buildId}</div> : null}
       </div>
     </div>
   );
