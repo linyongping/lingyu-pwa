@@ -203,7 +203,7 @@ html[data-theme="light"] .scrim { background: rgba(31, 41, 72, .28); }
 }
 .drawer-head { display: flex; align-items: center; gap: 10px; padding: 15px 20px; border-bottom: 1px solid var(--border); flex: none; }
 .drawer-title { font-size: 14px; font-weight: 600; }
-.drawer-body { flex: 1; overflow-y: auto; }
+.drawer-body { flex: 1; overflow-y: auto; overflow-x: hidden; }
 
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
 .set-label { font-size: 13.5px; font-weight: 500; }

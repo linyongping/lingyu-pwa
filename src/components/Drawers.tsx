@@ -134,10 +134,10 @@ export function SettingsDrawer({ open, settings, onSet, onClose, themePref, onTh
       </div>
       <div className="set-block">
         <div className="set-block-label">{t("settings.model")}</div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <select
             style={{
-              flex: 1, height: 36, padding: "0 10px", borderRadius: "var(--radius-sm)",
+              flex: "1 1 160px", minWidth: 0, height: 36, padding: "0 10px", borderRadius: "var(--radius-sm)",
               background: "var(--bg-elev)", border: "1px solid var(--border)", color: "var(--text)",
               fontFamily: "inherit", fontSize: 13, cursor: "pointer", outline: "none",
             }}
